@@ -1,0 +1,39 @@
+# Cloud Run service definition for the Next.js control room web app.
+#
+# Deploy with:
+#   gcloud run services replace infra/cloudrun-frontend.yaml --region=<region>
+#
+# Build and push the image first, e.g.:
+#   gcloud builds submit frontend --tag=gcr.io/<project>/premiere-control-room-web
+#
+# NEXT_PUBLIC_* variables are baked in at build time by Next.js, so the
+# frontend image build must be given the backend's Cloud Run URL as a
+# build arg / --build-env-var before this service definition is applied.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: control-room-web
+  labels:
+    app: premiere-control-room
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: gcr.io/PROJECT_ID/premiere-control-room-web:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://fastapi-backend-<hash>-uc.a.run.app"
+            - name: NEXT_PUBLIC_WS_URL
+              value: "wss://fastapi-backend-<hash>-uc.a.run.app/ws/control-room"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 256Mi

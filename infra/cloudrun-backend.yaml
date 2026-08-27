@@ -1,0 +1,58 @@
+# Cloud Run service definition for the FastAPI backend + ADK agent crew.
+#
+# Deploy with:
+#   gcloud run services replace infra/cloudrun-backend.yaml --region=<region>
+#
+# Build and push the image first, e.g.:
+#   gcloud builds submit backend --tag=gcr.io/<project>/premiere-control-room-backend
+#
+# Secrets referenced below (grafana-service-account-token, google-api-key)
+# must already exist in Secret Manager -- see docs/security.md.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: fastapi-backend
+  labels:
+    app: premiere-control-room
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/PROJECT_ID/premiere-control-room-backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GRAFANA_URL
+              value: "https://<stack>.grafana.net"
+            - name: GRAFANA_MCP_ENDPOINT
+              value: "https://mcp.grafana.com/mcp"
+            - name: GEMINI_MODEL
+              value: "gemini-flash-latest"
+            - name: DEMO_MODE
+              value: "true"
+            - name: CORS_ORIGINS
+              value: "https://control-room-web-<hash>-uc.a.run.app"
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://premiere:PASSWORD@/premiere_control_room?host=/cloudsql/PROJECT_ID:REGION:premiere-control-room-db"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "PROJECT_ID"
+            - name: GRAFANA_SERVICE_ACCOUNT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-service-account-token
+                  key: latest
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: google-api-key
+                  key: latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi

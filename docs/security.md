@@ -1,0 +1,6 @@
+# Security and Governance
+
+- **Least privilege by agent:** Sentinel and Detective only need read-scoped MCP access (metrics/logs/traces). Producer needs write access to Incidents. Responder needs write access to Alerting/Annotations — but every Responder write for a `high` risk action is gated behind `request_human_approval` (see [`agents.md`](agents.md#the-approval-tool-forced-function-calling)), which cannot be bypassed by the LLM.
+- **OAuth scope note:** the hosted Grafana Cloud MCP server issues one OAuth-consented session per connecting identity; if all five agents share one connection, that session's write scope should be granted deliberately at consent time, with the approval gate as the compensating control. For stricter separation, run Sentinel/Detective against a read-only self-hosted `mcp-grafana` service account and Producer/Responder against a separate write-scoped one.
+- **Auditability:** every agent action is persisted as an `AGENT_EVENT` row and mirrored into a Grafana Incident timeline via `add_activity_to_incident` / `create_annotation` — the incident record in Grafana and the local Postgres store should always agree.
+- **Secrets:** Grafana service-account tokens and Google Cloud credentials live in Secret Manager, never in source or client-side code.

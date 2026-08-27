@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Next.js (frontend/)
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Premiere Control Room backend
+backend/*.db
+backend/*.db-journal
+premiere_control_room.db
+
+# infra/scripts/ local state (deploy URLs, generated Cloud SQL password) --
+# never commit secrets or per-run deployment output
+infra/scripts/.backend-url
+infra/scripts/.frontend-url
+infra/scripts/.cloudsql-connection-name
+infra/scripts/.cloudsql-password
