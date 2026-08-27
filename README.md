@@ -7,6 +7,9 @@ An agentic reliability engineer for live media premieres, built on the Google Ag
 **Status:** Implemented and tested end-to-end against the deterministic mock crew (backend, frontend, synthetic OpenTelemetry pipeline, 16 automated tests). **Not yet verified against a live Grafana Cloud MCP server or real Gemini** — the code path is real (`McpToolset`, `output_schema`, verified against the installed `google-adk` API), but has never made an actual live call. See [Getting started](#getting-started) and [`docs/build-plan.md`](docs/build-plan.md) for exactly what's open.
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://console.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/akashtalole/continuity-premiere-control-room-agents&cloudshell_workspace=.&cloudshell_open_in_editor=infra/scripts/README.md)
+[![Docs](https://img.shields.io/badge/docs-akashtalole.github.io-blue)](https://akashtalole.github.io/Continuity-Premiere-Control-Room-Agents/)
+
+**Full documentation, including a [Setup Guide](https://akashtalole.github.io/Continuity-Premiere-Control-Room-Agents/setup-guide/) and [User Guide](https://akashtalole.github.io/Continuity-Premiere-Control-Room-Agents/user-guide/), is published at [akashtalole.github.io/Continuity-Premiere-Control-Room-Agents](https://akashtalole.github.io/Continuity-Premiere-Control-Room-Agents/).**
 
 ---
 

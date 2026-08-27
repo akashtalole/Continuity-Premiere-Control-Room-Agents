@@ -1,0 +1,83 @@
+site_name: Premiere Control Room
+site_description: >-
+  Agentic reliability engineer for live media premieres -- Google ADK agent
+  crew, Gemini, and the Grafana Cloud MCP server.
+site_url: https://akashtalole.github.io/Continuity-Premiere-Control-Room-Agents/
+repo_url: https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents
+repo_name: Continuity-Premiere-Control-Room-Agents
+edit_uri: edit/main/docs/
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Setup Guide: setup-guide.md
+      - User Guide: user-guide.md
+  - Architecture:
+      - Overview: overview.md
+      - Architecture: architecture.md
+      - Low-Level Design: low-level-design.md
+      - Repository Structure: repository-structure.md
+  - Backend & Agents:
+      - Backend: backend.md
+      - Agent Layer: agents.md
+      - Agent Instructions: agent-instructions.md
+      - MCP Tool Reference: mcp-tool-reference.md
+  - Frontend: frontend.md
+  - Operations:
+      - Deployment: deployment.md
+      - Security & Governance: security.md
+      - Non-Functional Requirements: non-functional-requirements.md
+  - Project:
+      - Build Plan: build-plan.md
+      - Demo Video Script: demo-video-script.md

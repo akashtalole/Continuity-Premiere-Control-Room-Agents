@@ -83,7 +83,7 @@ premiere-control-room/
 
 - **`backend/`** — FastAPI service, ADK agent crew, orchestrator, and the synthetic telemetry pipeline used for demos. See [`backend.md`](backend.md) and [`agents.md`](agents.md).
 - **`frontend/`** — Next.js control room web app. See [`frontend.md`](frontend.md).
-- **`infra/`** — Cloud Run service definitions and the deploy scripts; paired with each app's `Dockerfile`. See [`deployment.md`](deployment.md) and [`infra/scripts/README.md`](../infra/scripts/README.md).
+- **`infra/`** — Cloud Run service definitions and the deploy scripts; paired with each app's `Dockerfile`. See [`deployment.md`](deployment.md) and [`infra/scripts/README.md`](https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents/blob/main/infra/scripts/README.md).
 
 ## Running locally
 
