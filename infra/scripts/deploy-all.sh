@@ -19,18 +19,25 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 source ./lib.sh
 
-log "Step 1/4: project setup"
+log "Step 1/5: project setup"
 bash ./00-setup.sh
 
-log "Step 2/4: deploy backend"
+if [[ -n "${GRAFANA_URL:-}" ]]; then
+  log "Step 2/5: deploy self-hosted Grafana MCP server (GRAFANA_URL is set)"
+  bash ./deploy-mcp-grafana.sh
+else
+  log "Step 2/5: skipping self-hosted Grafana MCP server (GRAFANA_URL not set -- mock crew)"
+fi
+
+log "Step 3/5: deploy backend"
 bash ./deploy-backend.sh
 BACKEND_URL="$(cat ./.backend-url)"
 
-log "Step 3/4: deploy frontend"
+log "Step 4/5: deploy frontend"
 bash ./deploy-frontend.sh "$BACKEND_URL"
 FRONTEND_URL="$(cat ./.frontend-url)"
 
-log "Step 4/4: tightening backend CORS to $FRONTEND_URL"
+log "Step 5/5: tightening backend CORS to $FRONTEND_URL"
 resolve_project_id
 gcloud run services update "$BACKEND_SERVICE" \
   --region "$REGION" \
@@ -44,6 +51,9 @@ $(_color '32' 'Deployed.')
   Control room:  $FRONTEND_URL
   Backend API:   $BACKEND_URL
   API docs:      $BACKEND_URL/docs
+EOF
+[[ -f ./.mcp-grafana-url ]] && echo "  Grafana MCP:   $(cat ./.mcp-grafana-url)"
+cat <<EOF
 
 Open the control room URL and click "Inject demo anomaly" to drive a full
 incident through the crew. See docs/deployment.md for how to attach Cloud

@@ -30,8 +30,9 @@ flowchart TB
 | Variable | Used by | Description |
 |---|---|---|
 | `GRAFANA_URL` | backend | Grafana Cloud stack URL, e.g. `https://<stack>.grafana.net` |
-| `GRAFANA_MCP_ENDPOINT` | backend | `https://mcp.grafana.com/mcp` (hosted) or local `mcp-grafana` address |
-| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | backend (unattended mode only) | Required only if self-hosting `mcp-grafana` |
+| `GRAFANA_MCP_ENDPOINT` | backend | Self-hosted `mcp-grafana` URL (what `infra/scripts/deploy-mcp-grafana.sh` deploys -- the only option that works headlessly) or `https://mcp.grafana.com/mcp` (hosted, interactive-OAuth-only; see [`agents.md`](agents.md#grafana-mcp-tool-access)) |
+| `GRAFANA_SERVICE_ACCOUNT_TOKEN` | backend + mcp-grafana | This backend's credential for Grafana's dashboard-render API; also mcp-grafana's own credential for calling Grafana, if self-hosting it |
+| `GRAFANA_MCP_SERVER_TOKEN` | backend (self-hosted mcp-grafana only) | Caller-auth token this backend presents to the self-hosted MCP server; generated automatically by `deploy-mcp-grafana.sh` |
 | `GOOGLE_GENAI_USE_VERTEXAI` | backend | `true` (default on Cloud Run) authenticates to Gemini via Vertex AI using the backend service account's Application Default Credentials -- no API key needed. `false` (with `GOOGLE_API_KEY` set) uses the Gemini Developer API instead |
 | `GOOGLE_CLOUD_PROJECT` | backend | Vertex AI project (required when `GOOGLE_GENAI_USE_VERTEXAI=true`) |
 | `GOOGLE_CLOUD_LOCATION` | backend | Vertex AI region, e.g. `us-central1` |
@@ -50,7 +51,7 @@ Both `fastapi-backend` and `control-room-web` deploy as independent Cloud Run se
 
 ## Deploying from Google Cloud Shell
 
-`infra/scripts/deploy-all.sh` automates the whole thing — enabling APIs, creating the two service accounts and granting their IAM roles (including a fix for a common Cloud Build source-upload permission gap on new projects), building both images via Cloud Build, deploying both Cloud Run services, and wiring their URLs into each other (the backend's URL into the frontend's `NEXT_PUBLIC_API_URL` build arg, then the frontend's real URL back into the backend's `CORS_ORIGINS`). Run it from [Cloud Shell](https://cloud.google.com/shell):
+`infra/scripts/deploy-all.sh` automates the whole thing — enabling APIs, creating the three service accounts and granting their IAM roles (including a fix for a common Cloud Build source-upload permission gap on new projects), deploying the self-hosted Grafana MCP server if `GRAFANA_URL` is set, building both app images via Cloud Build, deploying both Cloud Run services, and wiring their URLs into each other (the backend's URL into the frontend's `NEXT_PUBLIC_API_URL` build arg, then the frontend's real URL back into the backend's `CORS_ORIGINS`). Run it from [Cloud Shell](https://cloud.google.com/shell):
 
 ```bash
 git clone https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents.git

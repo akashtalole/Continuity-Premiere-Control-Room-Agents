@@ -10,7 +10,13 @@
 # Configuration is via environment variables (all optional -- sensible
 # defaults run the real Gemini crew via Vertex AI against SQLite):
 #   GRAFANA_URL                       Grafana Cloud stack URL
-#   GRAFANA_SERVICE_ACCOUNT_TOKEN     stored in Secret Manager; prompted if unset and interactive
+#   GRAFANA_SERVICE_ACCOUNT_TOKEN     stored in Secret Manager; prompted if unset and interactive.
+#                                      Used both for the dashboard panel-image render API and,
+#                                      if self-hosting mcp-grafana, as its own credential.
+#   GRAFANA_MCP_ENDPOINT              defaults to the self-hosted mcp-grafana URL written by
+#                                      deploy-mcp-grafana.sh (if it was run), else the hosted
+#                                      mcp.grafana.com endpoint -- see that script's header
+#                                      comment for why hosted alone won't work here.
 #   GOOGLE_API_KEY                    optional override: use the Gemini Developer API
 #                                      instead of Vertex AI. Stored in Secret Manager;
 #                                      prompted if unset and interactive.
@@ -39,10 +45,18 @@ resolve_project_id
 ROOT="$(repo_root)"
 
 : "${GEMINI_MODEL:=gemini-flash-latest}"
-: "${GRAFANA_MCP_ENDPOINT:=https://mcp.grafana.com/mcp}"
 : "${DATABASE_URL:=sqlite+aiosqlite:///./premiere_control_room.db}"
 : "${DEMO_MODE:=true}"
 : "${CORS_ORIGINS:=*}"
+
+if [[ -z "${GRAFANA_MCP_ENDPOINT:-}" ]]; then
+  if [[ -f "$ROOT/infra/scripts/.mcp-grafana-url" ]]; then
+    GRAFANA_MCP_ENDPOINT="$(cat "$ROOT/infra/scripts/.mcp-grafana-url")"
+    log "Using self-hosted mcp-grafana endpoint from deploy-mcp-grafana.sh: $GRAFANA_MCP_ENDPOINT"
+  else
+    GRAFANA_MCP_ENDPOINT="https://mcp.grafana.com/mcp"
+  fi
+fi
 
 prompt_secret GOOGLE_API_KEY "Gemini API key -- leave blank to use Vertex AI via the service account instead (recommended)"
 prompt_secret GRAFANA_SERVICE_ACCOUNT_TOKEN "Grafana service account token (leave blank if using hosted OAuth or the mock crew)"
@@ -68,6 +82,14 @@ put_secret_value premiere-control-room-grafana-token "${GRAFANA_SERVICE_ACCOUNT_
 
 put_secret_value premiere-control-room-otel-headers "${OTEL_EXPORTER_OTLP_HEADERS:-}"
 [[ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ]] && SET_SECRETS+=("OTEL_EXPORTER_OTLP_HEADERS=premiere-control-room-otel-headers:latest")
+
+# Only present once deploy-mcp-grafana.sh has been run -- the caller-auth
+# token this backend presents to the self-hosted MCP server (see mcp.py).
+# Not relevant, and not set, when using the hosted mcp.grafana.com endpoint.
+if gcloud secrets describe premiere-control-room-mcp-server-token --project "$PROJECT_ID" >/dev/null 2>&1; then
+  SET_SECRETS+=("GRAFANA_MCP_SERVER_TOKEN=premiere-control-room-mcp-server-token:latest")
+  log "Found a self-hosted mcp-grafana caller-auth token; wiring it into the backend"
+fi
 
 if [[ -n "${DATABASE_URL:-}" && "$DATABASE_URL" == postgresql* ]]; then
   put_secret_value premiere-control-room-database-url "$DATABASE_URL"

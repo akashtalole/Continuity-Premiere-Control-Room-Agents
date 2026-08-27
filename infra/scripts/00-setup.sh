@@ -79,7 +79,20 @@ log "Granting frontend service account ($FRONTEND_SA_EMAIL) its runtime roles"
 grant_project_role "serviceAccount:$FRONTEND_SA_EMAIL" "roles/logging.logWriter"
 grant_project_role "serviceAccount:$FRONTEND_SA_EMAIL" "roles/monitoring.metricWriter"
 
+# Only used if you deploy the self-hosted MCP server (deploy-mcp-grafana.sh) --
+# it needs no GCP API access at all, just enough to read its two secrets
+# (the Grafana service-account token and its own caller-auth token) and emit
+# logs/metrics like the other two services.
+ensure_service_account "$MCP_GRAFANA_SA_NAME" "Premiere Control Room self-hosted Grafana MCP server (Cloud Run)"
+MCP_GRAFANA_SA_EMAIL="$(service_account_email "$MCP_GRAFANA_SA_NAME")"
+
+log "Granting mcp-grafana service account ($MCP_GRAFANA_SA_EMAIL) its runtime roles"
+grant_project_role "serviceAccount:$MCP_GRAFANA_SA_EMAIL" "roles/secretmanager.secretAccessor"
+grant_project_role "serviceAccount:$MCP_GRAFANA_SA_EMAIL" "roles/logging.logWriter"
+grant_project_role "serviceAccount:$MCP_GRAFANA_SA_EMAIL" "roles/monitoring.metricWriter"
+
 log "Setup complete."
-log "  Backend service account:  $BACKEND_SA_EMAIL"
-log "  Frontend service account: $FRONTEND_SA_EMAIL"
+log "  Backend service account:      $BACKEND_SA_EMAIL"
+log "  Frontend service account:     $FRONTEND_SA_EMAIL"
+log "  mcp-grafana service account:  $MCP_GRAFANA_SA_EMAIL"
 log "Next: bash infra/scripts/deploy-all.sh"
