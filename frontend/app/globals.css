@@ -5,13 +5,37 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Light theme -- semantic tokens consumed via tailwind.config.ts
+     (bg-app, bg-surface, border-line, text-primary, etc). Values are
+     "R G B" triples so Tailwind's <alpha-value> opacity modifiers work. */
+  --color-app: 248 250 252; /* slate-50 */
+  --color-surface: 255 255 255; /* white */
+  --color-surface-hover: 241 245 249; /* slate-100 */
+  --color-surface-inset: 241 245 249; /* slate-100 */
+  --color-line: 226 232 240; /* slate-200 */
+  --color-line-strong: 203 213 225; /* slate-300 */
+  --color-primary: 15 23 42; /* slate-900 */
+  --color-secondary: 51 65 85; /* slate-700 */
+  --color-muted: 100 116 139; /* slate-500 */
+  --color-brand: 2 132 199; /* sky-600 */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Dark theme */
+  --color-app: 2 6 23; /* slate-950 */
+  --color-surface: 15 23 42; /* slate-900 */
+  --color-surface-hover: 30 41 59; /* slate-800 */
+  --color-surface-inset: 2 6 23; /* slate-950 */
+  --color-line: 30 41 59; /* slate-800 */
+  --color-line-strong: 51 65 85; /* slate-700 */
+  --color-primary: 241 245 249; /* slate-100 */
+  --color-secondary: 203 213 225; /* slate-300 */
+  --color-muted: 148 163 184; /* slate-400 */
+  --color-brand: 56 189 248; /* sky-400 */
 }
 
 body {

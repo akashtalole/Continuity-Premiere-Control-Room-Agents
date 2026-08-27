@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { api, wsUrl } from "@/lib/api";
 import { useControlRoomSocket } from "@/lib/useControlRoomSocket";
 import type { AgentStatus, IncidentDetail, IncidentSummary } from "@/lib/types";
@@ -107,18 +106,18 @@ export default function ControlRoomPage() {
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl space-y-6 p-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+    <div className="mx-auto min-h-screen max-w-7xl space-y-6 p-6 lg:p-8">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Premiere Control Room</h1>
-          <p className="text-sm text-slate-400">Agentic reliability engineer for live media premieres</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-primary">Premiere Control Room</h1>
+          <p className="text-sm text-muted">Agentic reliability engineer for live media premieres</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span
             className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
               socketStatus === "open"
-                ? "border-emerald-600 text-emerald-300"
-                : "border-amber-600 text-amber-300"
+                ? "border-emerald-600 text-emerald-700 dark:text-emerald-300"
+                : "border-amber-600 text-amber-700 dark:text-amber-300"
             }`}
           >
             <span
@@ -126,18 +125,12 @@ export default function ControlRoomPage() {
             />
             {socketStatus === "open" ? "live" : socketStatus}
           </span>
-          <span className="text-xs text-slate-400">{activeIncidentCount} active incident(s)</span>
-          <Link
-            href="/history"
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-          >
-            History &amp; analytics
-          </Link>
+          <span className="text-xs text-muted">{activeIncidentCount} active incident(s)</span>
           <button
             type="button"
             onClick={injectConcurrentAnomalies}
             disabled={injecting}
-            className="rounded-md border border-rose-600 px-3 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-600/10 disabled:opacity-50"
+            className="rounded-md border border-rose-600 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-600/10 disabled:opacity-50 dark:text-rose-300"
           >
             {injecting ? "Injecting…" : "Inject 3 concurrent anomalies"}
           </button>
@@ -158,10 +151,10 @@ export default function ControlRoomPage() {
             key={agent.name}
             className={`rounded-md border px-3 py-2 text-center text-xs ${
               agent.state === "blocked"
-                ? "border-amber-500 text-amber-300"
+                ? "border-amber-500 text-amber-700 dark:text-amber-300"
                 : agent.state === "running"
-                  ? "border-sky-500 text-sky-300"
-                  : "border-slate-800 text-slate-500"
+                  ? "border-sky-500 text-sky-700 dark:text-sky-300"
+                  : "border-line text-muted"
             }`}
           >
             <p className="font-medium capitalize">{agent.name}</p>
@@ -180,10 +173,10 @@ export default function ControlRoomPage() {
           <AgentActivityFeed events={events} />
         </div>
         <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">Incidents</h2>
+          <div className="rounded-lg border border-line bg-surface p-4">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-secondary">Incidents</h2>
             <div className="space-y-2">
-              {incidents.length === 0 && <p className="text-sm text-slate-500">No incidents yet.</p>}
+              {incidents.length === 0 && <p className="text-sm text-muted">No incidents yet.</p>}
               {incidents.map((incident) => (
                 <button
                   key={incident.id}
@@ -192,11 +185,11 @@ export default function ControlRoomPage() {
                   className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm ${
                     incident.id === selectedId
                       ? "border-sky-500 bg-sky-500/10"
-                      : "border-slate-800 hover:border-slate-700"
+                      : "border-line hover:border-line-strong"
                   }`}
                 >
-                  <span className="truncate">{incident.title}</span>
-                  <span className="ml-2 shrink-0 text-xs uppercase text-slate-400">
+                  <span className="truncate text-primary">{incident.title}</span>
+                  <span className="ml-2 shrink-0 text-xs uppercase text-muted">
                     {incident.status.replace(/_/g, " ")}
                   </span>
                 </button>
@@ -216,6 +209,6 @@ export default function ControlRoomPage() {
           setPendingApprovals((prev) => prev.filter((p) => p.incidentId !== incidentId));
         }}
       />
-    </main>
+    </div>
   );
 }

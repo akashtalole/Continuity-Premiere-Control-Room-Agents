@@ -17,15 +17,15 @@ function regionHealth(region: string, incidents: IncidentSummary[]): "healthy" |
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  healthy: "bg-emerald-500/20 border-emerald-500 text-emerald-300",
-  degraded: "bg-rose-500/20 border-rose-500 text-rose-300 animate-pulse",
-  recovering: "bg-amber-500/20 border-amber-500 text-amber-300",
+  healthy: "bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300",
+  degraded: "bg-rose-500/10 border-rose-500 text-rose-700 dark:text-rose-300 animate-pulse",
+  recovering: "bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300",
 };
 
 export function LiveQoEMap({ incidents }: { incidents: IncidentSummary[] }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Live QoE map</h2>
+    <div className="rounded-lg border border-line bg-surface p-4">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-secondary">Live QoE map</h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {REGIONS.map((region) => {
           const status = regionHealth(region, incidents);
