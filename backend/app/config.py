@@ -11,10 +11,22 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Grafana Cloud MCP
+    # Grafana Cloud MCP -- see docs/agents.md#grafana-mcp-tool-access for the
+    # two auth paths this splits into:
+    #   - Self-hosted `grafana/mcp-grafana` (infra/scripts/deploy-mcp-grafana.sh):
+    #     the only option that works from an unattended Cloud Run backend. The
+    #     mcp-grafana server holds grafana_service_account_token itself (its
+    #     own credential for calling Grafana); this backend instead presents
+    #     grafana_mcp_server_token, the separate caller-auth secret mcp-grafana
+    #     was started with (--server-auth-token / MCP_GRAFANA_SERVER_TOKEN).
+    #   - Hosted mcp.grafana.com: multi-tenant, routed by grafana_url via the
+    #     X-Grafana-URL header, but only accepts an interactive OAuth 2.1
+    #     session -- there is no service-account option, so it cannot be
+    #     driven headlessly and is not what production deployments should use.
     grafana_url: str = ""
     grafana_mcp_endpoint: str = "https://mcp.grafana.com/mcp"
     grafana_service_account_token: str = ""
+    grafana_mcp_server_token: str = ""
 
     # Google ADK / Gemini. Two supported auth paths -- see docs/deployment.md:
     #   - Vertex AI (recommended for Cloud Run): google_genai_use_vertexai=True

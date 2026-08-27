@@ -24,6 +24,8 @@ die()   { _color '31' "xx  $*" >&2; exit 1; }
 : "${FRONTEND_SERVICE:=premiere-control-room-web}"
 : "${BACKEND_SA_NAME:=premiere-backend}"
 : "${FRONTEND_SA_NAME:=premiere-frontend}"
+: "${MCP_GRAFANA_SA_NAME:=premiere-mcp-grafana}"
+: "${MCP_GRAFANA_SERVICE:=premiere-control-room-mcp-grafana}"
 
 resolve_project_id() {
   if [[ -n "${PROJECT_ID:-}" ]]; then
@@ -126,6 +128,13 @@ put_secret_value() {
   ensure_secret "$name"
   printf '%s' "$value" | gcloud secrets versions add "$name" --project "$PROJECT_ID" --data-file=- >/dev/null
   log "Stored a new version of secret '$name'"
+}
+
+# random_token: a URL-safe random secret, for values this project generates
+# itself rather than asking the user for (e.g. MCP_GRAFANA_SERVER_TOKEN).
+random_token() {
+  require_command openssl
+  openssl rand -base64 32 | tr -d '\n=' | tr '+/' '-_'
 }
 
 # prompt_secret <env_var_name> <prompt_text>: if the named env var is already

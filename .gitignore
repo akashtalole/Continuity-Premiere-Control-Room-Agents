@@ -238,3 +238,5 @@ infra/scripts/.backend-url
 infra/scripts/.frontend-url
 infra/scripts/.cloudsql-connection-name
 infra/scripts/.cloudsql-password
+infra/scripts/.mcp-grafana-url
+infra/scripts/.mcp-grafana-server-token

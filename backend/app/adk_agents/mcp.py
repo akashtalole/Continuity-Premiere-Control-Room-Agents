@@ -22,11 +22,22 @@ def grafana_toolset(tool_filter: list[str] | None = None) -> McpToolset:
     """
     settings = get_settings()
 
-    headers: dict[str, str] = {"X-Grafana-URL": settings.grafana_url}
-    if settings.grafana_service_account_token:
-        # Self-hosted grafana/mcp-grafana, authenticated with a service
-        # account token instead of the hosted server's interactive OAuth.
-        headers["Authorization"] = f"Bearer {settings.grafana_service_account_token}"
+    headers: dict[str, str] = {}
+    if settings.grafana_mcp_server_token:
+        # Self-hosted grafana/mcp-grafana (infra/scripts/deploy-mcp-grafana.sh),
+        # single-tenant: it already knows which Grafana stack to talk to from
+        # its own GRAFANA_URL/GRAFANA_SERVICE_ACCOUNT_TOKEN env vars, so this
+        # backend never handles the Grafana credential itself for MCP calls --
+        # it only presents the separate caller-auth token mcp-grafana was
+        # started with (--server-auth-token / MCP_GRAFANA_SERVER_TOKEN).
+        headers["Authorization"] = f"Bearer {settings.grafana_mcp_server_token}"
+    else:
+        # Hosted mcp.grafana.com: multi-tenant, routes by X-Grafana-URL, and
+        # only accepts an interactive OAuth 2.1 session -- there's no
+        # service-account path, so this only works if something already
+        # completed that browser flow out-of-band. Not viable for an
+        # unattended Cloud Run deployment; see docs/agents.md.
+        headers["X-Grafana-URL"] = settings.grafana_url
 
     return McpToolset(
         connection_params=StreamableHTTPConnectionParams(

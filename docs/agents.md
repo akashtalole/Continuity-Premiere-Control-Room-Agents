@@ -2,7 +2,7 @@
 
 This is the as-built version of the agent layer (`backend/app/adk_agents/`). It differs from the original design sketch in one important way: the spec's draft `agent.run_async(input=...)` call doesn't exist on `google.adk.agents.Agent` in `google-adk` 2.7.x. The real invocation surface is `google.adk.runners.Runner` driven by a `SessionService`, streaming `Event`s back per turn — `runner.py` below wraps that into a one-shot `AgentInvoker.run()` call the orchestrator can await like the spec originally imagined.
 
-## Shared MCP toolset
+## Grafana MCP tool access
 
 ```python
 # backend/app/adk_agents/mcp.py
@@ -13,12 +13,18 @@ from app.config import get_settings
 
 
 def grafana_toolset(tool_filter: list[str] | None = None) -> McpToolset:
-    """Build an MCP toolset connected to Grafana Cloud (or self-hosted mcp-grafana)."""
+    """Build an MCP toolset connected to Grafana Cloud (self-hosted mcp-grafana, or hosted)."""
     settings = get_settings()
 
-    headers: dict[str, str] = {"X-Grafana-URL": settings.grafana_url}
-    if settings.grafana_service_account_token:
-        headers["Authorization"] = f"Bearer {settings.grafana_service_account_token}"
+    headers: dict[str, str] = {}
+    if settings.grafana_mcp_server_token:
+        # Self-hosted mcp-grafana: single-tenant, so it already knows which
+        # stack to talk to from its own env vars. We only present the
+        # separate caller-auth token it was started with.
+        headers["Authorization"] = f"Bearer {settings.grafana_mcp_server_token}"
+    else:
+        # Hosted mcp.grafana.com: multi-tenant, routed by this header.
+        headers["X-Grafana-URL"] = settings.grafana_url
 
     return McpToolset(
         connection_params=StreamableHTTPConnectionParams(
@@ -31,7 +37,18 @@ def grafana_toolset(tool_filter: list[str] | None = None) -> McpToolset:
 
 Each agent gets its own `McpToolset` instance, scoped with `tool_filter` to exactly the MCP tools listed for that agent in [`low-level-design.md`](low-level-design.md#grafana-mcp-tool-mapping) — this is what makes Sentinel/Detective read-only and Producer/Responder the only agents that can reach write tools, enforced by the toolset itself rather than by agent instructions alone.
 
-> For a fully unattended deployment (no one available to complete the one-time browser OAuth), swap this for the open-source `grafana/mcp-grafana` server run alongside the backend, authenticated with a Grafana service-account token instead of interactive OAuth (set `GRAFANA_SERVICE_ACCOUNT_TOKEN`). The hosted `mcp.grafana.com` endpoint has no service-account option.
+**Hosted vs. self-hosted, and why this backend defaults to self-hosted in production.** Grafana ships two MCP servers (see the [hackathon's Grafana resources](https://agentic-cinema.devpost.com/details/grafana-resources)):
+
+- **Hosted** (`https://mcp.grafana.com/mcp`): zero setup, but authenticates with an interactive, browser-based OAuth 2.1 flow only — there is no service-account or API-key option. That's fine for a person's own AI assistant, but there is no one to click "authorize" for an unattended Cloud Run backend, so this path only works if a session was already established out-of-band and doesn't survive past its token refresh window unattended.
+- **Self-hosted** (`grafana/mcp-grafana`, open source): the documented path for exactly this case. It runs as its own process/container, authenticated to your Grafana stack with a service-account token (`GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN`, set as *its own* env vars — this backend never sees that credential for MCP purposes), and since it's then reachable over the network from wherever it's deployed, it also supports gating callers with a separate shared secret (`--server-auth-token` / `MCP_GRAFANA_SERVER_TOKEN`) so it isn't wide open.
+
+`infra/scripts/deploy-mcp-grafana.sh` deploys the self-hosted server to its own Cloud Run service and generates that caller-auth token automatically; `deploy-backend.sh` picks up both the resulting URL and token so `grafana_mcp_endpoint` / `grafana_mcp_server_token` above resolve correctly with zero manual wiring. See [`infra/scripts/README.md`](../infra/scripts/README.md#connecting-real-grafana-cloud-mcp) for the end-to-end walkthrough.
+
+## AI Observability: the agent crew's own telemetry, for free
+
+Grafana Cloud's [AI Observability](https://grafana.com/docs/grafana-cloud/machine-learning/ai-observability/) app is OpenTelemetry-native monitoring for agent LLM calls and MCP tool activity (token usage, latency, tool spans) — one of the resources the hackathon explicitly calls out. We don't hand-instrument anything for it: `google-adk` has its own built-in OpenTelemetry tracer (`google.adk.telemetry.tracing`) that emits a real span for every LLM call (`trace_call_llm`) and every tool call (`trace_tool_call`, including every Grafana MCP tool call), tagged with the standard `gen_ai.*`/`mcp.*` semantic-convention attributes (model, token counts, tool name, MCP session id, etc).
+
+That tracer resolves against whichever `TracerProvider` is registered process-globally via OpenTelemetry's own `trace.set_tracer_provider()` — and `app/simulate/otel_pipeline.py` already registers one at backend startup (see [its module docstring](../backend/app/simulate/otel_pipeline.py)), exporting over OTLP to whatever `OTEL_EXPORTER_OTLP_ENDPOINT`/`OTEL_EXPORTER_OTLP_HEADERS` point at. The practical result: once those two env vars point at Grafana Cloud's OTLP gateway (see [`infra/scripts/README.md`](../infra/scripts/README.md#real-opentelemetry-export)), the agent crew's real Gemini calls and MCP tool calls start showing up in Grafana Cloud's AI Observability app and Tempo alongside the synthetic SLO pipeline's spans — no separate instrumentation path, no extra code.
 
 ## Agent definitions
 

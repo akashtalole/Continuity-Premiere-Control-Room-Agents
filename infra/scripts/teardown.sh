@@ -37,6 +37,10 @@ log "Deleting Cloud Run service '$BACKEND_SERVICE'"
 gcloud run services delete "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --quiet \
   || warn "Backend service not found or already deleted."
 
+log "Deleting Cloud Run service '$MCP_GRAFANA_SERVICE'"
+gcloud run services delete "$MCP_GRAFANA_SERVICE" --region "$REGION" --project "$PROJECT_ID" --quiet \
+  || warn "mcp-grafana service not found or already deleted (fine if you're on the mock crew)."
+
 if [[ "$WITH_CLOUDSQL" == true ]]; then
   : "${INSTANCE_NAME:=premiere-control-room-db}"
   log "Deleting Cloud SQL instance '$INSTANCE_NAME'"
@@ -45,7 +49,7 @@ if [[ "$WITH_CLOUDSQL" == true ]]; then
 fi
 
 if [[ "$WITH_SERVICE_ACCOUNTS" == true ]]; then
-  for sa_name in "$BACKEND_SA_NAME" "$FRONTEND_SA_NAME"; do
+  for sa_name in "$BACKEND_SA_NAME" "$FRONTEND_SA_NAME" "$MCP_GRAFANA_SA_NAME"; do
     email="$(service_account_email "$sa_name")"
     log "Deleting service account '$email'"
     gcloud iam service-accounts delete "$email" --project "$PROJECT_ID" --quiet \
@@ -53,6 +57,6 @@ if [[ "$WITH_SERVICE_ACCOUNTS" == true ]]; then
   done
 fi
 
-rm -f ./.backend-url ./.frontend-url
+rm -f ./.backend-url ./.frontend-url ./.mcp-grafana-url ./.mcp-grafana-server-token
 
 log "Teardown complete."

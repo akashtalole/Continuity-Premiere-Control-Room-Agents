@@ -119,8 +119,15 @@ _stop_event: asyncio.Event | None = None
 
 
 def _build_resource() -> Resource:
+    # This TracerProvider is registered process-globally (trace.set_tracer_provider
+    # below), so it doesn't only carry this module's synthetic spans -- google-adk
+    # has its own built-in OpenTelemetry instrumentation (see
+    # google.adk.telemetry.tracing) that emits real spans for every agent LLM call
+    # and every Grafana MCP tool call via the same global tracer, with no extra
+    # wiring needed. The resource name reflects that: it's the whole backend
+    # process's telemetry identity, not just this synthetic pipeline's.
     return Resource.create(
-        {"service.name": "premiere-control-room-live-pipeline", "service.namespace": "premiere-control-room"}
+        {"service.name": "premiere-control-room-backend", "service.namespace": "premiere-control-room"}
     )
 
 
