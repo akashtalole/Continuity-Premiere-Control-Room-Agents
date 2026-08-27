@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useWorkspace } from "@/lib/workspace";
 import type { AnalyticsSummary, IncidentSummary, PostmortemReport } from "@/lib/types";
 
 function formatDuration(seconds: number | null): string {
@@ -45,6 +46,7 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function HistoryPage() {
+  const { workspaceId } = useWorkspace();
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [query, setQuery] = useState("");
@@ -53,9 +55,9 @@ export default function HistoryPage() {
   const [postmortems, setPostmortems] = useState<Record<string, PostmortemReport | "unavailable">>({});
 
   useEffect(() => {
-    api.listIncidents().then(setIncidents).catch(() => undefined);
+    api.listIncidents(workspaceId).then(setIncidents).catch(() => undefined);
     api.analyticsSummary().then(setAnalytics).catch(() => undefined);
-  }, []);
+  }, [workspaceId]);
 
   const statuses = useMemo(() => Array.from(new Set(incidents.map((i) => i.status))).sort(), [incidents]);
 
@@ -108,6 +110,14 @@ export default function HistoryPage() {
           }
         />
       </section>
+
+      {analytics && (analytics.total_input_tokens > 0 || analytics.total_output_tokens > 0) && (
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile label="Gemini input tokens" value={analytics.total_input_tokens.toLocaleString()} />
+          <StatTile label="Gemini output tokens" value={analytics.total_output_tokens.toLocaleString()} />
+          <StatTile label="Estimated cost (USD)" value={`$${analytics.estimated_cost_usd.toFixed(4)}`} />
+        </section>
+      )}
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <BreachBars title="Breaches by metric" counts={analytics?.breaches_by_metric ?? {}} />
@@ -162,7 +172,16 @@ export default function HistoryPage() {
                       <p className="text-muted">No postmortem generated for this incident yet.</p>
                     )}
                     {pm && pm !== "unavailable" && (
-                      <pre className="whitespace-pre-wrap font-sans text-secondary">{pm.summary_markdown}</pre>
+                      <>
+                        <a
+                          href={api.postmortemExportUrl(incident.id)}
+                          download
+                          className="mb-2 inline-block text-xs text-brand hover:underline"
+                        >
+                          Download as .md
+                        </a>
+                        <pre className="whitespace-pre-wrap font-sans text-secondary">{pm.summary_markdown}</pre>
+                      </>
                     )}
                   </div>
                 )}

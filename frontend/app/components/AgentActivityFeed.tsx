@@ -45,7 +45,14 @@ export function AgentActivityFeed({ events }: { events: AgentEvent[] }) {
                   {new Date(event.timestamp).toLocaleTimeString()}
                 </time>
               </div>
-              <p className="mt-1 truncate text-xs text-muted">incident {event.incident_id.slice(0, 8)}</p>
+              <p className="mt-1 truncate text-xs text-muted">
+                incident {event.incident_id.slice(0, 8)}
+                {typeof event.payload.confidence === "number" && (
+                  <span className="ml-2 rounded-full border border-current px-1.5 py-0.5 text-[10px]">
+                    {Math.round(event.payload.confidence * 100)}% confidence
+                  </span>
+                )}
+              </p>
             </div>
           );
         })}

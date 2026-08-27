@@ -46,6 +46,28 @@ class Settings(BaseSettings):
     otel_tick_interval_seconds: float = 5.0
     otel_export_interval_seconds: float = 10.0
 
+    # Auth -- see app/auth.py. jwt_secret left empty generates a random,
+    # process-lifetime-only secret (fine for a single demo instance; tokens
+    # just stop validating across a restart). Set it explicitly for anything
+    # multi-instance or where sessions should survive a redeploy.
+    jwt_secret: str = ""
+    jwt_expiry_minutes: int = 480
+    # Bootstrap admin, created once on first startup if the users table is
+    # empty. If admin_password is left blank, a random one is generated and
+    # logged once at WARNING level -- see app/auth.py:ensure_bootstrap_data.
+    admin_email: str = "admin@premiere.local"
+    admin_password: str = ""
+
+    # Notifications -- see app/services/notifications.py. Comma-separated
+    # webhook URLs (Slack incoming webhooks accept this same {"text": ...}
+    # JSON shape, so no separate Slack-specific integration is needed).
+    notification_webhook_urls: str = ""
+    escalation_timeout_seconds: float = 300.0
+
+    @property
+    def notification_webhook_url_list(self) -> list[str]:
+        return [u.strip() for u in self.notification_webhook_urls.split(",") if u.strip()]
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

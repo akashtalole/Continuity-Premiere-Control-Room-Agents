@@ -97,8 +97,15 @@ class AgentEventRecord(BaseModel):
     created_at: datetime
 
 
+class AgentTokenUsage(BaseModel):
+    agent_name: str
+    input_tokens: int
+    output_tokens: int
+
+
 class IncidentDetail(IncidentSummary):
     events: list[AgentEventRecord] = Field(default_factory=list)
+    token_usage: list[AgentTokenUsage] = Field(default_factory=list)
 
 
 class AgentStatus(BaseModel):
@@ -128,6 +135,9 @@ class AnalyticsSummary(BaseModel):
     mttr_seconds: float | None = None
     breaches_by_metric: dict[str, int]
     breaches_by_region: dict[str, int]
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    estimated_cost_usd: float = 0.0
 
 
 class ChaosRequest(BaseModel):
@@ -140,3 +150,55 @@ class ChaosResponse(BaseModel):
     metric_name: str
     region: str
     duration_seconds: float
+
+
+# --- auth / audit / workspaces --------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    email: str
+    role: Literal["viewer", "operator", "admin"]
+    workspace_id: str
+
+
+class UserSummary(BaseModel):
+    id: UUID
+    email: str
+    role: Literal["viewer", "operator", "admin"]
+    workspace_id: str
+    active: bool
+    created_at: datetime
+
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: Literal["viewer", "operator", "admin"] = "viewer"
+    workspace_id: str = "default"
+
+
+class AuditLogEntry(BaseModel):
+    id: UUID
+    actor_email: str
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class WorkspaceSummary(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+
+
+class CreateWorkspaceRequest(BaseModel):
+    id: str
+    name: str
