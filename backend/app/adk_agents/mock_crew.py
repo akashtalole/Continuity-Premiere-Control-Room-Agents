@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from app.adk_agents.approval import request_human_approval
+from app.adk_agents.memory_tools import find_similar_incidents
 from app.adk_agents.playbooks import select_playbook
 
 UPSTREAM_BY_METRIC: dict[str, list[str]] = {
@@ -35,16 +36,39 @@ class MockDetectiveInvoker:
         metric = input_data.get("metric_name", "rebuffer_ratio")
         region = input_data.get("region", "us-east-1")
         upstream = UPSTREAM_BY_METRIC.get(metric, ["edge-cache"])
+
+        # Real DB lookup (not canned) -- see memory_tools.py. Gives the mock
+        # crew the same "have we seen this before" behavior the real
+        # Detective gets from its find_similar_incidents tool, so the
+        # feature is demoable without live Gemini/Grafana credentials.
+        precedents = await find_similar_incidents(metric, limit=3)
+        confidence = 0.82
+        summary = (
+            f"Correlated a spike in '{metric}' in {region} with anomalous behavior in "
+            f"{' and '.join(upstream)}."
+        )
+        if precedents:
+            confidence = min(0.95, confidence + 0.05 * len(precedents))
+            summary += (
+                f" This is the {_ordinal(len(precedents) + 1)} time '{metric}' has breached; "
+                f"last time the fix was {precedents[0].get('action_taken') or 'unresolved'}."
+            )
+
         return {
-            "summary": (
-                f"Correlated a spike in '{metric}' in {region} with anomalous behavior in "
-                f"{' and '.join(upstream)}."
-            ),
-            "confidence": 0.82,
+            "summary": summary,
+            "confidence": confidence,
             "upstream_services": upstream,
             "supporting_trace_ids": ["trace-7f1a9c", "trace-7f1a9d"],
             "supporting_log_query": f'{{service="{upstream[0]}", region="{region}"}} |= "error"',
         }
+
+
+def _ordinal(n: int) -> str:
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
 
 
 class MockProducerInvoker:

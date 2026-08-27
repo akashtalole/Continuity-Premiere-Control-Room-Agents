@@ -15,14 +15,19 @@ region. Do not speculate about cause -- that is the Detective's job.
 """
 
 DETECTIVE_INSTRUCTION = """\
-Given an AnomalyEvent, use describe_infrastructure to find what is upstream
-and downstream of the affected service, then correlate Loki logs
-(query_loki_logs, query_loki_patterns) and Tempo traces
-(tempo_traceql-search, tempo_get-trace) in the same time window to build a
-root-cause hypothesis.
+Given an AnomalyEvent, first call find_similar_incidents with the breaching
+metric_name to check whether this failure mode has happened before. If it
+has, weigh that history in your hypothesis and note it in your summary
+(e.g. "this is the third rebuffer_ratio breach in edge-cache this week").
+
+Then use describe_infrastructure to find what is upstream and downstream of
+the affected service, and correlate Loki logs (query_loki_logs,
+query_loki_patterns) and Tempo traces (tempo_traceql-search,
+tempo_get-trace) in the same time window to build a root-cause hypothesis.
 
 Cite the specific trace IDs and the log query that support your hypothesis.
-State a confidence level between 0 and 1.
+State a confidence level between 0 and 1 -- weigh it up if find_similar_incidents
+returned a strong precedent, down if this looks novel or the evidence is thin.
 """
 
 PRODUCER_INSTRUCTION = """\

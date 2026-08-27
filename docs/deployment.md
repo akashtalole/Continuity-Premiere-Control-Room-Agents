@@ -44,6 +44,11 @@ flowchart TB
 | `SIMULATE_LIVE_PIPELINE` | backend | Enables the synthetic OpenTelemetry pipeline (default `true`) -- see [`agents.md`](agents.md#synthetic-live-streaming-pipeline) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | backend | Standard OTel env var; point it at Grafana Cloud's OTLP gateway (or a local collector) to export real telemetry. Unset = console export only |
 | `OTEL_EXPORTER_OTLP_HEADERS` | backend | Standard OTel env var for OTLP auth, e.g. `Authorization=Basic <base64 instance_id:api_key>` for Grafana Cloud |
+| `JWT_SECRET` | backend | Signs auth tokens; set explicitly for multi-instance or restart-persistent deployments (see [`security.md`](security.md)) |
+| `JWT_EXPIRY_MINUTES` | backend | Access token lifetime, default `480` (8h) |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | backend | Bootstrap admin account, created once if no users exist. Random password generated + logged once if unset |
+| `NOTIFICATION_WEBHOOK_URLS` | backend | Comma-separated webhook URLs (Slack incoming webhooks work directly) notified on approval-needed/escalation/resolved -- see [`agents.md`](agents.md#escalation--notifications) |
+| `ESCALATION_TIMEOUT_SECONDS` | backend | Re-notify if a high-risk remediation is still awaiting approval after this long, default `300` |
 | `NEXT_PUBLIC_WS_URL` | frontend | WebSocket endpoint the browser connects to |
 
 Both `fastapi-backend` and `control-room-web` deploy as independent Cloud Run services, each running as its own dedicated, least-privilege service account (`premiere-backend`, `premiere-frontend`) rather than the shared Compute Engine default service account -- see [`infra/scripts/README.md`](../infra/scripts/README.md#service-accounts) for exactly what each is granted. The agent crew runs in-process inside the backend by default; `Vertex AI Agent Engine` is an optional deployment target if the crew needs to scale or be hosted independently of the API layer. All secrets (Grafana tokens, an optional Gemini API key) are sourced from Secret Manager at runtime — see [`security.md`](security.md). Gemini access itself doesn't need a stored secret at all: the backend service account authenticates to Vertex AI directly via Application Default Credentials.

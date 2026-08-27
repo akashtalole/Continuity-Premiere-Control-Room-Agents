@@ -46,8 +46,15 @@ export type AgentEventRecord = {
   created_at: string;
 };
 
+export type AgentTokenUsage = {
+  agent_name: AgentName;
+  input_tokens: number;
+  output_tokens: number;
+};
+
 export type IncidentDetail = IncidentSummary & {
   events: AgentEventRecord[];
+  token_usage: AgentTokenUsage[];
 };
 
 export type AgentStatusState = "idle" | "running" | "blocked";
@@ -70,4 +77,41 @@ export type AnalyticsSummary = {
   mttr_seconds: number | null;
   breaches_by_metric: Record<string, number>;
   breaches_by_region: Record<string, number>;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  estimated_cost_usd: number;
+};
+
+export type Role = "viewer" | "operator" | "admin";
+
+export type AuthSession = {
+  access_token: string;
+  email: string;
+  role: Role;
+  workspace_id: string;
+};
+
+export type UserSummary = {
+  id: string;
+  email: string;
+  role: Role;
+  workspace_id: string;
+  active: boolean;
+  created_at: string;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  actor_email: string;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+};
+
+export type WorkspaceSummary = {
+  id: string;
+  name: string;
+  created_at: string;
 };

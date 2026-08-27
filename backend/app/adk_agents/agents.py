@@ -17,6 +17,7 @@ from app.adk_agents.instructions import (
     WRAP_INSTRUCTION,
 )
 from app.adk_agents.mcp import grafana_toolset
+from app.adk_agents.memory_tools import find_similar_incidents_tool
 from app.adk_agents.output_schemas import SentinelFinding
 from app.config import get_settings
 from app.models.schemas import IncidentBrief, PostmortemReport, RemediationAction, RootCauseFinding
@@ -60,7 +61,7 @@ def build_agent_crew() -> dict[str, Agent]:
         name="detective",
         description="Correlates metrics, logs, and traces to a root-cause hypothesis.",
         instruction=DETECTIVE_INSTRUCTION,
-        tools=[grafana_toolset(tool_filter=DETECTIVE_TOOLS)],
+        tools=[grafana_toolset(tool_filter=DETECTIVE_TOOLS), find_similar_incidents_tool],
         output_schema=RootCauseFinding,
     )
 

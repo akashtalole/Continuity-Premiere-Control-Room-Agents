@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme";
+import { AuthProvider } from "@/lib/auth";
+import { WorkspaceProvider } from "@/lib/workspace";
 import { AppShell } from "./components/AppShell";
 
 const geistSans = localFont({
@@ -37,7 +39,11 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ThemeProvider>
-          <AppShell>{children}</AppShell>
+          <AuthProvider>
+            <WorkspaceProvider>
+              <AppShell>{children}</AppShell>
+            </WorkspaceProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

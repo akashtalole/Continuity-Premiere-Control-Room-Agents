@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api, wsUrl } from "@/lib/api";
+import Link from "next/link";
+import { api, ApiError, wsUrl } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 import { useControlRoomSocket } from "@/lib/useControlRoomSocket";
 import type { AgentStatus, IncidentDetail, IncidentSummary } from "@/lib/types";
 import { LiveQoEMap } from "./components/LiveQoEMap";
@@ -19,6 +22,8 @@ const MULTI_INCIDENT_SCENARIOS = [
 ];
 
 export default function ControlRoomPage() {
+  const { hasRole } = useAuth();
+  const { workspaceId } = useWorkspace();
   const { events, status: socketStatus } = useControlRoomSocket(wsUrl());
   const [incidents, setIncidents] = useState<IncidentSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -26,9 +31,10 @@ export default function ControlRoomPage() {
   const [agentStatuses, setAgentStatuses] = useState<AgentStatus[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [injecting, setInjecting] = useState(false);
+  const [injectError, setInjectError] = useState<string | null>(null);
 
   const refreshIncidents = async () => {
-    const list = await api.listIncidents();
+    const list = await api.listIncidents(workspaceId);
     setIncidents(list);
     if (!selectedId && list.length > 0) setSelectedId(list[0].id);
   };
@@ -40,7 +46,7 @@ export default function ControlRoomPage() {
     const interval = setInterval(pollAgentStatus, 3000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [workspaceId]);
 
   // Re-fetch the incident list + selected detail whenever a new agent event
   // lands, and surface a pending-approval modal when the Responder blocks.
@@ -78,6 +84,7 @@ export default function ControlRoomPage() {
 
   const injectDemoAnomaly = async () => {
     setInjecting(true);
+    setInjectError(null);
     try {
       const regions = ["us-east-1", "eu-west-1", "apac"];
       const region = regions[Math.floor(Math.random() * regions.length)];
@@ -88,6 +95,8 @@ export default function ControlRoomPage() {
         region,
       });
       setSelectedId(incident_id);
+    } catch (err) {
+      setInjectError(err instanceof ApiError ? err.message : "Failed to inject anomaly.");
     } finally {
       setInjecting(false);
     }
@@ -98,8 +107,11 @@ export default function ControlRoomPage() {
   // incidents (see docs/low-level-design.md's concurrent-incidents note).
   const injectConcurrentAnomalies = async () => {
     setInjecting(true);
+    setInjectError(null);
     try {
       await Promise.all(MULTI_INCIDENT_SCENARIOS.map((scenario) => api.injectAnomaly(scenario)));
+    } catch (err) {
+      setInjectError(err instanceof ApiError ? err.message : "Failed to inject anomalies.");
     } finally {
       setInjecting(false);
     }
@@ -126,10 +138,16 @@ export default function ControlRoomPage() {
             {socketStatus === "open" ? "live" : socketStatus}
           </span>
           <span className="text-xs text-muted">{activeIncidentCount} active incident(s)</span>
+          {!hasRole("operator") && (
+            <Link href="/login" className="text-xs text-brand hover:underline">
+              Sign in to inject
+            </Link>
+          )}
           <button
             type="button"
             onClick={injectConcurrentAnomalies}
-            disabled={injecting}
+            disabled={injecting || !hasRole("operator")}
+            title={!hasRole("operator") ? "Sign in as an operator or admin" : undefined}
             className="rounded-md border border-rose-600 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-600/10 disabled:opacity-50 dark:text-rose-300"
           >
             {injecting ? "Injecting…" : "Inject 3 concurrent anomalies"}
@@ -137,13 +155,16 @@ export default function ControlRoomPage() {
           <button
             type="button"
             onClick={injectDemoAnomaly}
-            disabled={injecting}
+            disabled={injecting || !hasRole("operator")}
+            title={!hasRole("operator") ? "Sign in as an operator or admin" : undefined}
             className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-500 disabled:opacity-50"
           >
             {injecting ? "Injecting…" : "Inject demo anomaly"}
           </button>
         </div>
       </header>
+
+      {injectError && <p className="text-sm text-rose-600 dark:text-rose-400">{injectError}</p>}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-5">
         {agentStatuses.map((agent) => (
