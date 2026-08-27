@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Builds the frontend image (with the backend's URL baked in at build time --
 # Next.js inlines NEXT_PUBLIC_* vars during `next build`) and deploys it to
-# Cloud Run.
+# Cloud Run, running as the dedicated frontend service account created by
+# 00-setup.sh (a minimal identity -- no Gemini/secrets access, since the
+# frontend never talks to Grafana or Gemini directly).
 #
 # Usage:
 #   bash infra/scripts/deploy-frontend.sh [backend-url]
@@ -30,6 +32,11 @@ fi
 
 WS_URL="${BACKEND_URL/https:/wss:}/ws/control-room"
 
+FRONTEND_SA_EMAIL="$(service_account_email "$FRONTEND_SA_NAME")"
+if ! gcloud iam service-accounts describe "$FRONTEND_SA_EMAIL" --project "$PROJECT_ID" >/dev/null 2>&1; then
+  die "Service account $FRONTEND_SA_EMAIL doesn't exist yet. Run infra/scripts/00-setup.sh first."
+fi
+
 IMAGE="$(image_uri web)"
 log "Building frontend image: $IMAGE"
 log "  NEXT_PUBLIC_API_URL=$BACKEND_URL"
@@ -55,12 +62,13 @@ EOF
 
 gcloud builds submit "$ROOT/frontend" --config "$CLOUDBUILD_CONFIG" --project "$PROJECT_ID"
 
-log "Deploying $FRONTEND_SERVICE to Cloud Run ($REGION)"
+log "Deploying $FRONTEND_SERVICE to Cloud Run ($REGION) as $FRONTEND_SA_EMAIL"
 gcloud run deploy "$FRONTEND_SERVICE" \
   --image "$IMAGE" \
   --region "$REGION" \
   --project "$PROJECT_ID" \
   --platform managed \
+  --service-account "$FRONTEND_SA_EMAIL" \
   --allow-unauthenticated \
   --memory 256Mi \
   --min-instances 0 \

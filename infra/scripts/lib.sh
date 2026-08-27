@@ -22,6 +22,8 @@ die()   { _color '31' "xx  $*" >&2; exit 1; }
 : "${REPO_NAME:=premiere-control-room}"
 : "${BACKEND_SERVICE:=premiere-control-room-backend}"
 : "${FRONTEND_SERVICE:=premiere-control-room-web}"
+: "${BACKEND_SA_NAME:=premiere-backend}"
+: "${FRONTEND_SA_NAME:=premiere-frontend}"
 
 resolve_project_id() {
   if [[ -n "${PROJECT_ID:-}" ]]; then
@@ -32,6 +34,17 @@ resolve_project_id() {
     die "No GCP project selected. Run 'gcloud config set project <PROJECT_ID>' first, or export PROJECT_ID=<id>."
   fi
   export PROJECT_ID
+}
+
+# project_number: the numeric project ID Cloud Build's default identity
+# (<number>-compute@developer.gserviceaccount.com) and some IAM bindings need.
+# Cached in PROJECT_NUMBER after the first call.
+project_number() {
+  if [[ -z "${PROJECT_NUMBER:-}" ]]; then
+    PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+    export PROJECT_NUMBER
+  fi
+  echo "$PROJECT_NUMBER"
 }
 
 require_command() {
@@ -51,6 +64,46 @@ artifact_registry_host() {
 image_uri() {
   # image_uri <backend|web>
   echo "$(artifact_registry_host)/${PROJECT_ID}/${REPO_NAME}/$1:latest"
+}
+
+# --- service accounts / IAM ---------------------------------------------------
+
+# service_account_email <short-name>: the full email for a service account
+# created via ensure_service_account below, e.g. "premiere-backend" ->
+# "premiere-backend@my-project.iam.gserviceaccount.com".
+service_account_email() {
+  echo "$1@${PROJECT_ID}.iam.gserviceaccount.com"
+}
+
+# ensure_service_account <short-name> <display-name>: creates the service
+# account if it doesn't exist yet. Idempotent.
+ensure_service_account() {
+  local short_name="$1" display_name="$2"
+  local email
+  email="$(service_account_email "$short_name")"
+  if gcloud iam service-accounts describe "$email" --project "$PROJECT_ID" >/dev/null 2>&1; then
+    return
+  fi
+  log "Creating service account '$short_name' ($display_name)"
+  gcloud iam service-accounts create "$short_name" \
+    --project "$PROJECT_ID" \
+    --display-name "$display_name" >/dev/null
+  # Service account creation is eventually consistent; IAM bindings issued
+  # immediately after can 404 on a cold project. A few seconds is enough in
+  # practice and cheap relative to the minutes the rest of this takes.
+  sleep 5
+}
+
+# grant_project_role <member> <role>: idempotent `add-iam-policy-binding` --
+# re-adding an existing binding is a documented no-op, so this is safe to
+# call on every run without checking first.
+grant_project_role() {
+  local member="$1" role="$2"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="$member" \
+    --role="$role" \
+    --condition=None \
+    --format=none
 }
 
 # ensure_secret <name>: creates the secret container if it doesn't exist yet

@@ -16,8 +16,16 @@ class Settings(BaseSettings):
     grafana_mcp_endpoint: str = "https://mcp.grafana.com/mcp"
     grafana_service_account_token: str = ""
 
-    # Google ADK / Gemini
+    # Google ADK / Gemini. Two supported auth paths -- see docs/deployment.md:
+    #   - Vertex AI (recommended for Cloud Run): google_genai_use_vertexai=True
+    #     with google_cloud_project/google_cloud_location set, no API key --
+    #     google-genai authenticates via the Cloud Run service account's
+    #     Application Default Credentials (see infra/scripts/00-setup.sh).
+    #   - Gemini Developer API: google_api_key set, used for local dev or if
+    #     you'd rather not grant Vertex AI IAM roles.
     google_cloud_project: str = ""
+    google_cloud_location: str = "us-central1"
+    google_genai_use_vertexai: bool = False
     google_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
@@ -48,8 +56,15 @@ class Settings(BaseSettings):
 
         Without these, the orchestrator falls back to a deterministic mock
         crew so the API and UI remain fully exercisable in local/demo runs.
+        Gemini access counts as configured via either auth path: an API key,
+        or Vertex AI mode with a project set (credentials then come from
+        Application Default Credentials -- the Cloud Run service account in
+        production, `gcloud auth application-default login` locally).
         """
-        return bool(self.google_api_key and self.grafana_url)
+        gemini_configured = bool(self.google_api_key) or bool(
+            self.google_genai_use_vertexai and self.google_cloud_project
+        )
+        return bool(gemini_configured and self.grafana_url)
 
 
 @lru_cache

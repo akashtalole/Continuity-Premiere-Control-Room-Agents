@@ -10,9 +10,10 @@
 #   bash infra/scripts/deploy-all.sh
 #
 # See deploy-backend.sh's header comment for the environment variables that
-# configure Grafana/Gemini credentials, Cloud SQL, and OTLP export -- export
-# them before running this script, or just run it with none set to get a
-# live demo URL on the deterministic mock crew.
+# configure Grafana credentials, Cloud SQL, and OTLP export -- export them
+# before running this script, or just run it with none set to get a live
+# demo URL on the deterministic mock crew (Gemini access via Vertex AI and
+# the dedicated service accounts this creates are wired up either way).
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"

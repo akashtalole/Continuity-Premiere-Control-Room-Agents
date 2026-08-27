@@ -32,7 +32,10 @@ flowchart TB
 | `GRAFANA_URL` | backend | Grafana Cloud stack URL, e.g. `https://<stack>.grafana.net` |
 | `GRAFANA_MCP_ENDPOINT` | backend | `https://mcp.grafana.com/mcp` (hosted) or local `mcp-grafana` address |
 | `GRAFANA_SERVICE_ACCOUNT_TOKEN` | backend (unattended mode only) | Required only if self-hosting `mcp-grafana` |
-| `GOOGLE_CLOUD_PROJECT` | backend | Vertex AI / Agent Platform project |
+| `GOOGLE_GENAI_USE_VERTEXAI` | backend | `true` (default on Cloud Run) authenticates to Gemini via Vertex AI using the backend service account's Application Default Credentials -- no API key needed. `false` (with `GOOGLE_API_KEY` set) uses the Gemini Developer API instead |
+| `GOOGLE_CLOUD_PROJECT` | backend | Vertex AI project (required when `GOOGLE_GENAI_USE_VERTEXAI=true`) |
+| `GOOGLE_CLOUD_LOCATION` | backend | Vertex AI region, e.g. `us-central1` |
+| `GOOGLE_API_KEY` | backend | Only needed if using the Gemini Developer API instead of Vertex AI |
 | `GEMINI_MODEL` | backend | e.g. `gemini-flash-latest` |
 | `DATABASE_URL` | backend | Postgres connection string (SQLite for local dev) |
 | `DEMO_MODE` | backend | Enables `/api/simulate/inject-anomaly` |
@@ -43,19 +46,19 @@ flowchart TB
 | `OTEL_EXPORTER_OTLP_HEADERS` | backend | Standard OTel env var for OTLP auth, e.g. `Authorization=Basic <base64 instance_id:api_key>` for Grafana Cloud |
 | `NEXT_PUBLIC_WS_URL` | frontend | WebSocket endpoint the browser connects to |
 
-Both `fastapi-backend` and `control-room-web` deploy as independent Cloud Run services. The agent crew runs in-process inside the backend by default; `Vertex AI Agent Engine` is an optional deployment target if the crew needs to scale or be hosted independently of the API layer. All secrets (Grafana tokens, Google Cloud credentials) are sourced from Secret Manager at runtime — see [`security.md`](security.md).
+Both `fastapi-backend` and `control-room-web` deploy as independent Cloud Run services, each running as its own dedicated, least-privilege service account (`premiere-backend`, `premiere-frontend`) rather than the shared Compute Engine default service account -- see [`infra/scripts/README.md`](../infra/scripts/README.md#service-accounts) for exactly what each is granted. The agent crew runs in-process inside the backend by default; `Vertex AI Agent Engine` is an optional deployment target if the crew needs to scale or be hosted independently of the API layer. All secrets (Grafana tokens, an optional Gemini API key) are sourced from Secret Manager at runtime — see [`security.md`](security.md). Gemini access itself doesn't need a stored secret at all: the backend service account authenticates to Vertex AI directly via Application Default Credentials.
 
 ## Deploying from Google Cloud Shell
 
-`infra/scripts/deploy-all.sh` automates the whole thing — enabling APIs, building both images via Cloud Build, deploying both Cloud Run services, and wiring their URLs into each other (the backend's URL into the frontend's `NEXT_PUBLIC_API_URL` build arg, then the frontend's real URL back into the backend's `CORS_ORIGINS`). Run it from [Cloud Shell](https://cloud.google.com/shell):
+`infra/scripts/deploy-all.sh` automates the whole thing — enabling APIs, creating the two service accounts and granting their IAM roles (including a fix for a common Cloud Build source-upload permission gap on new projects), building both images via Cloud Build, deploying both Cloud Run services, and wiring their URLs into each other (the backend's URL into the frontend's `NEXT_PUBLIC_API_URL` build arg, then the frontend's real URL back into the backend's `CORS_ORIGINS`). Run it from [Cloud Shell](https://cloud.google.com/shell):
 
 ```bash
-git clone https://github.com/akashtalole/Agentic-Cinema-The-Blockbuster-Hackathon.git
-cd Agentic-Cinema-The-Blockbuster-Hackathon
+git clone https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents.git
+cd Continuity-Premiere-Control-Room-Agents
 gcloud config set project <YOUR_PROJECT_ID>
 bash infra/scripts/deploy-all.sh
 ```
 
-With no other environment variables set, this deploys the backend on the deterministic mock crew (no Gemini/Grafana credentials required) — a fully functional live demo URL in a few minutes. See [`infra/scripts/README.md`](../infra/scripts/README.md) for connecting real Grafana Cloud MCP + Gemini credentials, provisioning Cloud SQL for real persistence (the default SQLite is ephemeral on Cloud Run), enabling real OTLP export, and tearing everything down afterward.
+With no other environment variables set, this deploys the real Gemini crew via Vertex AI (no API key required) with the deterministic mock crew still standing in for the Grafana side until `GRAFANA_URL` is provided — a fully functional live demo URL in a few minutes either way. See [`infra/scripts/README.md`](../infra/scripts/README.md) for connecting real Grafana Cloud MCP credentials, using a Gemini API key instead of Vertex AI, provisioning Cloud SQL for real persistence (the default SQLite is ephemeral on Cloud Run), enabling real OTLP export, and tearing everything down afterward.
 
 Each app also ships its own `Dockerfile` (`backend/Dockerfile`, `frontend/Dockerfile`) if you'd rather drive `gcloud builds submit` / `gcloud run deploy` by hand; `infra/cloudrun-backend.yaml` and `infra/cloudrun-frontend.yaml` document the equivalent declarative Cloud Run service manifests (`gcloud run services replace <file> --region <region>`), though the scripts under `infra/scripts/` are the tested, maintained path.
