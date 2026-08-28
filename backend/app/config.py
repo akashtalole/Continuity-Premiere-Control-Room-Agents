@@ -41,8 +41,19 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
-    # Persistence
+    # Persistence -- two stores, deliberately:
+    #   - database_url (SQL): users, audit log, workspaces -- relational
+    #     constraints (unique email) and audit queries fit SQL better.
+    #   - Firestore (app/firestore_db.py): incidents, agent events,
+    #     remediation, postmortems, token usage -- the UI-facing,
+    #     agent-written timeline data. Schema-less and high-write, a better
+    #     fit for a document store. Defaults to google_cloud_project;
+    #     override with firestore_project_id if Firestore lives in a
+    #     different project than Vertex AI. Setting FIRESTORE_EMULATOR_HOST
+    #     (standard google-cloud-firestore behavior) routes to a local
+    #     emulator instead -- see tests/conftest.py.
     database_url: str = "sqlite+aiosqlite:///./premiere_control_room.db"
+    firestore_project_id: str = ""
 
     # Demo / ops
     demo_mode: bool = True

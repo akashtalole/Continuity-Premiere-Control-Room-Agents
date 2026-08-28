@@ -20,6 +20,7 @@ dependencies = [
     "opentelemetry-sdk>=1.27.0",
     "opentelemetry-exporter-otlp-proto-http>=1.27.0",
     "pyjwt>=2.9.0",
+    "google-cloud-firestore>=2.19.0",
 ]
 
 [project.optional-dependencies]
@@ -38,4 +39,11 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Session-scoped: the Firestore AsyncClient (app/firestore_db.py) is a
+# process-wide lru_cache singleton whose gRPC channel binds to whatever
+# event loop is running when it's first constructed. A fresh per-test loop
+# (pytest-asyncio's default) would leave that channel pointing at a closed
+# loop on every test after the first, raising "Event loop is closed".
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
