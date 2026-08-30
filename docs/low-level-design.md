@@ -77,6 +77,8 @@ sequenceDiagram
 
 ## Persisted data model
 
+The relationships below are conceptually still accurate, but physically only `WORKSPACE` and its `User`/`AuditLogRow` relations remain SQL tables today -- `INCIDENT` and everything hanging off it now live in Firestore as one document per incident with `agent_events`/`token_usage` subcollections (`ANOMALY_EVENT`/`REMEDIATION_ACTION`/`POSTMORTEM` are nested maps on that same document, not separate rows). See [`agents.md`](agents.md#firestore-persistence) for the real document shape and why the split.
+
 ```mermaid
 erDiagram
     INCIDENT ||--o{ ANOMALY_EVENT : contains
@@ -241,4 +243,4 @@ Multiple incidents can be in flight at once: `Orchestrator.start_incident` fires
 - **Agent status** (`app/services/agent_status.py`) tracks, per agent, the *set* of incident IDs it's currently working rather than a single `current_incident_id` -- otherwise a second incident reaching "Detective" would silently overwrite the first's status. `GET /api/agents/status` reports `active_incidents: [...]` per agent, and the agent's overall `state` is `blocked` if any of its active incidents are blocked, else `running`.
 - **The control room UI** queues approval requests instead of replacing one pending approval with the next (see [`frontend.md`](frontend.md)), and the "Inject 3 concurrent anomalies" demo button exists specifically to exercise this path.
 
-The one place concurrency isn't free is the demo SQLite database, which serializes writes under load; this is fine for a hackathon demo's incident volume; see [`deployment.md`](deployment.md) for switching to Postgres in production.
+The one place concurrency isn't free is the demo SQLite database (users/audit-log/workspaces only -- see [`agents.md`](agents.md#firestore-persistence)), which serializes writes under load; this is fine for a hackathon demo's volume of those; see [`deployment.md`](deployment.md) for switching to Postgres in production. Incident data itself (Firestore) isn't subject to this -- Firestore handles concurrent per-document writes natively.

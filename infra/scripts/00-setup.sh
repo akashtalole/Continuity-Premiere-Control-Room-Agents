@@ -30,7 +30,32 @@ gcloud services enable \
   aiplatform.googleapis.com \
   iam.googleapis.com \
   compute.googleapis.com \
+  firestore.googleapis.com \
   --project "$PROJECT_ID"
+
+# --- Firestore -----------------------------------------------------------------
+# Incidents, agent events, remediation actions, postmortems, and token usage
+# -- the UI-facing, agent-written timeline data -- live in Firestore Native
+# mode (see backend/app/firestore_db.py). A project gets exactly one
+# Firestore database, created once; its location is permanent, so this only
+# creates it if it doesn't exist yet rather than trying to reconcile a
+# mismatched location on re-run.
+#
+# Firestore locations aren't identical to Cloud Run regions (e.g. Cloud Run's
+# "us-central1" maps to Firestore's "nam5" multi-region) -- override with
+# FIRESTORE_LOCATION if $REGION isn't a valid Firestore location.
+: "${FIRESTORE_LOCATION:=$REGION}"
+
+if gcloud firestore databases describe --database='(default)' --project "$PROJECT_ID" >/dev/null 2>&1; then
+  log "Firestore database already exists; leaving its location as-is"
+else
+  log "Creating Firestore database (Native mode, location=$FIRESTORE_LOCATION)"
+  gcloud firestore databases create \
+    --database='(default)' \
+    --location="$FIRESTORE_LOCATION" \
+    --type=firestore-native \
+    --project "$PROJECT_ID"
+fi
 
 # Newer projects don't automatically grant Cloud Build's default runtime
 # identity (the Compute Engine default service account) read access to the
@@ -69,6 +94,7 @@ log "Granting backend service account ($BACKEND_SA_EMAIL) its runtime roles"
 grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/aiplatform.user"          # Gemini via Vertex AI
 grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/secretmanager.secretAccessor"  # Grafana/OTLP secrets
 grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/cloudsql.client"          # no-op unless Cloud SQL is attached
+grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/datastore.user"          # Firestore: incidents/events/postmortems
 grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/logging.logWriter"
 grant_project_role "serviceAccount:$BACKEND_SA_EMAIL" "roles/monitoring.metricWriter"
 

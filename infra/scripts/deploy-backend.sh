@@ -21,8 +21,12 @@
 #                                      instead of Vertex AI. Stored in Secret Manager;
 #                                      prompted if unset and interactive.
 #   GEMINI_MODEL                      default: gemini-flash-latest
-#   DATABASE_URL                      default: SQLite (ephemeral -- see the warning this script prints)
+#   DATABASE_URL                      default: SQLite, for users/audit-log/workspaces only (see the warning this script prints)
 #   CLOUDSQL_INSTANCE_CONNECTION_NAME set this (project:region:instance) to attach a Cloud SQL instance
+#   FIRESTORE_PROJECT_ID              default: same project as GOOGLE_CLOUD_PROJECT. Incidents/agent events/
+#                                      postmortems/token usage live here (see infra/scripts/00-setup.sh,
+#                                      which provisions the Firestore database and grants roles/datastore.user).
+#                                      Override only if Firestore lives in a different project.
 #   OTEL_EXPORTER_OTLP_ENDPOINT       Grafana Cloud OTLP gateway, or leave unset for console-only telemetry
 #   OTEL_EXPORTER_OTLP_HEADERS        stored in Secret Manager; e.g. "Authorization=Basic <base64>"
 #   CORS_ORIGINS                      default: "*" (deploy-all.sh tightens this after the frontend deploys)
@@ -126,6 +130,7 @@ ENV_VARS=(
   "OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
 )
 [[ -n "$DATABASE_URL_ENV" ]] && ENV_VARS+=("DATABASE_URL=${DATABASE_URL_ENV}")
+[[ -n "${FIRESTORE_PROJECT_ID:-}" ]] && ENV_VARS+=("FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID}")
 
 ENV_VARS_JOINED="$(IFS=,; echo "${ENV_VARS[*]}")"
 
@@ -152,11 +157,14 @@ fi
 
 if [[ "$DATABASE_URL" == sqlite* ]]; then
   warn "DATABASE_URL is SQLite -- each Cloud Run instance has its own ephemeral"
-  warn "filesystem, and incident history will NOT persist across redeploys or"
-  warn "cold starts after a long idle period. Pinning to a single instance"
-  warn "(--min-instances=1 --max-instances=1) so at least concurrent requests"
-  warn "see consistent data. For real persistence, provision Cloud SQL"
-  warn "(infra/scripts/provision-cloudsql.sh) and re-run with DATABASE_URL set."
+  warn "filesystem, so users/audit-log/workspaces will NOT persist across"
+  warn "redeploys or cold starts after a long idle period. (Incidents/agent"
+  warn "events/postmortems/token usage are unaffected -- those live in"
+  warn "Firestore, not SQLite; see infra/scripts/00-setup.sh.) Pinning to a"
+  warn "single instance (--min-instances=1 --max-instances=1) so at least"
+  warn "concurrent requests see consistent user/audit data. For real"
+  warn "persistence, provision Cloud SQL (infra/scripts/provision-cloudsql.sh)"
+  warn "and re-run with DATABASE_URL set."
   DEPLOY_ARGS+=(--min-instances 1 --max-instances 1)
 else
   DEPLOY_ARGS+=(--min-instances 0 --max-instances 10)

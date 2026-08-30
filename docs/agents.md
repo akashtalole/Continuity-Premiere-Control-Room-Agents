@@ -198,7 +198,7 @@ This keeps the FastAPI backend, orchestrator, persistence, WebSocket feed, and c
 
 ## Orchestrator
 
-`app/orchestrator.py` drives one incident through Detective -> Producer -> Responder -> Wrap (Sentinel's detection is the input that starts the run — either the background polling loop below or `POST /api/simulate/inject-anomaly`), persisting each step as an `AGENT_EVENT` row and broadcasting it over the control-room WebSocket. It consults the playbook table (`playbooks.py`, see [`low-level-design.md`](low-level-design.md#remediation-playbook-table)) *before* calling the Responder, so only high-risk actions show the approval-pending UI state:
+`app/orchestrator.py` drives one incident through Detective -> Producer -> Responder -> Wrap (Sentinel's detection is the input that starts the run — either the background polling loop below or `POST /api/simulate/inject-anomaly`), persisting each step as a Firestore `agent_events` document (see [Firestore persistence](#firestore-persistence) below) and broadcasting it over the control-room WebSocket. It consults the playbook table (`playbooks.py`, see [`low-level-design.md`](low-level-design.md#remediation-playbook-table)) *before* calling the Responder, so only high-risk actions show the approval-pending UI state:
 
 ```python
 # backend/app/orchestrator.py (abridged -- see the file for persistence/status-tracking detail)
@@ -239,11 +239,46 @@ async def _run_crew(self, incident_id, anomaly):
 
 ## Cross-incident memory
 
-`app/adk_agents/memory_tools.py` gives the Detective a `find_similar_incidents(metric_name, limit)` `FunctionTool` -- plain application data, not a vector store or RAG pipeline, since "has this exact metric broken before" is a query, not a semantic search. It looks up past incidents with the same breaching `metric_name` that reached a terminal status, joining in each one's remediation action and postmortem excerpt. `DETECTIVE_INSTRUCTION` tells the agent to call it first and weigh its confidence up or down based on what comes back. `app/adk_agents/mock_crew.py`'s `MockDetectiveInvoker` calls the same lookup function directly (not a canned response), so the "we've seen this before" behavior demos identically without live Gemini/Grafana credentials -- see `tests/test_memory.py`.
+`app/adk_agents/memory_tools.py` gives the Detective a `find_similar_incidents(metric_name, limit)` `FunctionTool` -- a real Firestore read (`app/services/incident_store.py`, see below), not a vector store or RAG pipeline, since "has this exact metric broken before" is a query, not a semantic search. It looks up past incidents with the same breaching `metric_name` that reached a terminal status, joining in each one's remediation action and postmortem excerpt. `DETECTIVE_INSTRUCTION` tells the agent to call it first and weigh its confidence up or down based on what comes back. `app/adk_agents/mock_crew.py`'s `MockDetectiveInvoker` calls the same lookup function directly (not a canned response), so the "we've seen this before" behavior demos identically without live Gemini/Grafana credentials -- see `tests/test_memory.py`.
 
 ## Cost & token usage
 
-`AgentInvoker.run()` (runner.py) reads `event.usage_metadata` (`prompt_token_count` / `candidates_token_count`) off every ADK event and accumulates it into `self.last_usage`; the orchestrator persists that as an `AgentTokenUsageRow` after each agent turn (a no-op for the mock crew's invokers, which never set `last_usage` since they never call a model). `GET /api/incidents/{id}` returns each incident's per-agent breakdown, and `GET /api/analytics/summary` returns fleet-wide totals plus a rough estimated USD cost (list-price constants in `routers/analytics.py`, not a real billing integration) -- surfaced in the frontend's incident timeline and history page.
+`AgentInvoker.run()` (runner.py) reads `event.usage_metadata` (`prompt_token_count` / `candidates_token_count`) off every ADK event and accumulates it into `self.last_usage`; the orchestrator persists that as a Firestore `token_usage` document after each agent turn (a no-op for the mock crew's invokers, which never set `last_usage` since they never call a model). `GET /api/incidents/{id}` returns each incident's per-agent breakdown, and `GET /api/analytics/summary` returns fleet-wide totals (via a Firestore collection-group query across every incident's `token_usage` subcollection) plus a rough estimated USD cost (list-price constants in `routers/analytics.py`, not a real billing integration) -- surfaced in the frontend's incident timeline and history page.
+
+## Firestore persistence
+
+Incidents, agent events, remediation actions, postmortems, and token usage -- the UI-facing, agent-written timeline data -- live in Firestore (Native mode) rather than the SQL database, behind `app/services/incident_store.py`. `app/orchestrator.py`, `routers/incidents.py`, `routers/analytics.py`, and `memory_tools.py` all go through that module rather than talking to `google-cloud-firestore` directly:
+
+```python
+# backend/app/services/incident_store.py (abridged)
+async def create_incident(title, status, workspace_id, anomaly) -> str: ...
+async def record_agent_event(incident_id, agent_name, event_type, payload) -> None: ...
+async def record_remediation(incident_id, resolution, approved_by) -> None: ...
+async def record_postmortem(incident_id, postmortem) -> None: ...
+async def find_similar_incidents(metric_name, limit=3) -> list[dict]: ...
+async def analytics_summary() -> dict: ...
+```
+
+Why split the persistence layer at all, rather than putting everything in Firestore or everything in SQL: users/audit-log/workspaces (unchanged, still SQLAlchemy -- see `app/models/db.py`) benefit from relational constraints (a unique index on email) and audit-trail queries that SQL fits naturally; incidents are schema-less, high-write, timeline-shaped data (one incident accumulates an open-ended stream of agent events and token-usage entries) that suits a document store better and needs no relational constraints at all.
+
+Document shape, one Firestore document per incident with two ordered subcollections:
+
+```
+incidents/{incident_id}
+  title, status, grafana_incident_id, workspace_id, opened_at, resolved_at,
+  anomaly: {metric_name, observed_value, threshold, region, detected_at},
+  remediation: {action_type, risk_level, approval_status, approved_by, executed_at} | None,
+  postmortem: {summary_markdown, timeline, generated_at} | None,
+
+  agent_events/{event_id}   -- one per crew step
+  token_usage/{usage_id}    -- one per agent turn
+```
+
+`anomaly`/`remediation`/`postmortem` are nested maps rather than subcollections since this app's flow only ever writes one of each per incident (a 1:1 relationship a subcollection would just add query overhead to); `agent_events`/`token_usage` are genuinely repeated per incident, so those stay as ordered subcollections.
+
+Queries deliberately avoid combining a Firestore equality filter with a server-side `orderBy` on a *different* field (`list_incidents`, `find_similar_incidents`): that combination requires a manually-created composite index, and this app's incident volumes are demo/ops scale, so filtering on the indexed field server-side and sorting the (small) result set in Python avoids a manual `gcloud firestore indexes composite create` step being a hard prerequisite for the app to work at all.
+
+**Auth**: the async client (`app/firestore_db.py`) uses Application Default Credentials -- the Cloud Run service account's ADC in production (granted `roles/datastore.user` by `infra/scripts/00-setup.sh`), or `gcloud auth application-default login` locally. Setting `FIRESTORE_EMULATOR_HOST` (as `tests/conftest.py` does, spawning a local emulator via `firebase-tools`) routes every call at a local emulator instead, ignoring real credentials entirely -- standard `google-cloud-firestore` behavior, not something this app implements itself. See [`setup-guide.md`](setup-guide.md#firestore) for running the emulator locally, and [`infra/scripts/README.md`](https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents/blob/main/infra/scripts/README.md#persistence-firestore-incidents-sqlite--cloud-sql-for-users) for GCP provisioning.
 
 ## Escalation and notifications
 
@@ -255,6 +290,6 @@ async def _run_crew(self, incident_id, anomaly):
 
 ## Workspaces
 
-`Workspace`/`Incident.workspace_id`/`User.workspace_id` give this a lightweight multi-tenancy boundary: incidents and users belong to exactly one workspace (a `default` one is seeded on first startup), `GET /api/incidents`/`GET /api/workspaces` accept an optional `workspace_id` filter for the frontend's switcher, and `POST /api/simulate/inject-anomaly` always tags the new incident with the *caller's own* workspace_id (not a client-supplied one). This is application-level data isolation, not infrastructure isolation -- there's one shared Grafana MCP connection and one WebSocket broadcast stream across all workspaces; per-workspace Grafana credentials and a workspace-scoped socket are natural follow-ups if that's ever needed.
+`Workspace`/`User.workspace_id` (SQL) and each Firestore incident document's `workspace_id` field give this a lightweight multi-tenancy boundary: incidents and users belong to exactly one workspace (a `default` one is seeded on first startup), `GET /api/incidents`/`GET /api/workspaces` accept an optional `workspace_id` filter for the frontend's switcher, and `POST /api/simulate/inject-anomaly` always tags the new incident with the *caller's own* workspace_id (not a client-supplied one). This is application-level data isolation, not infrastructure isolation -- there's one shared Grafana MCP connection, one Firestore database, and one WebSocket broadcast stream across all workspaces; per-workspace Grafana credentials and a workspace-scoped socket are natural follow-ups if that's ever needed.
 
 See [`agent-instructions.md`](agent-instructions.md) for the full instruction text given to each agent, [`low-level-design.md`](low-level-design.md#grafana-mcp-tool-mapping) for which MCP tools each agent is scoped to, and [`backend.md`](backend.md) for how `POST /api/incidents/{id}/approve|reject` resolves the pending `request_human_approval` future.

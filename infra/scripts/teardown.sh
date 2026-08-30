@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Deletes the Cloud Run services created by deploy-all.sh, so a hackathon
 # demo doesn't keep incurring charges after judging is over. Artifact
-# Registry images, Secret Manager secrets, and the enabled APIs are left in
-# place (cheap to keep, and you may want to redeploy) -- delete them
-# manually if you want a full teardown.
+# Registry images, Secret Manager secrets, the Firestore database (incident
+# data), and the enabled APIs are left in place (cheap/free to keep, and you
+# may want to redeploy) -- delete them manually if you want a full teardown.
+# (Firestore in particular: a project gets exactly one database, and it
+# can't be recreated for a cooldown period after deletion, so this script
+# never touches it.)
 #
 # Usage:
 #   bash infra/scripts/teardown.sh                        # Cloud Run services only

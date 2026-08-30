@@ -20,13 +20,10 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import select
-
 from app.adk_agents.crew import get_crew
 from app.config import get_settings
-from app.db import session_scope
-from app.models.db import Incident
 from app.models.schemas import IncidentStatus
+from app.services import incident_store
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +57,9 @@ def _slo_thresholds() -> list[dict[str, Any]]:
 
 async def _has_open_incident(metric_name: str, region: str) -> bool:
     """Dedupe: don't open a second incident for a metric/region already mid-flight."""
-    async with session_scope() as db:
-        rows = (await db.execute(select(Incident.title, Incident.status))).all()
+    incidents = await incident_store.list_incidents()
     needle = f"{metric_name} in {region}"
-    return any(needle in title and status not in _SETTLED_STATUSES for title, status in rows)
+    return any(needle in i["title"] and i["status"] not in _SETTLED_STATUSES for i in incidents)
 
 
 async def _poll_once() -> None:

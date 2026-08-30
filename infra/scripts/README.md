@@ -18,9 +18,10 @@ That's it — the script prints both service URLs at the end. With no other envi
 ## What it does
 
 1. **`00-setup.sh`** — one-time project setup:
-   - Enables the Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Vertex AI (`aiplatform.googleapis.com`), and IAM APIs.
+   - Enables the Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Vertex AI (`aiplatform.googleapis.com`), Firestore (`firestore.googleapis.com`), and IAM APIs.
    - Grants the Compute Engine default service account `roles/cloudbuild.builds.builder`, fixing a common Cloud Build permission gap on newer projects (`could not resolve source: ... storage.objects.get ... forbidden`) that otherwise fails every build before it starts.
    - Creates an Artifact Registry Docker repo.
+   - Creates the project's Firestore database (Native mode) if it doesn't exist yet — see [Persistence](#persistence-firestore-incidents-sqlite--cloud-sql-for-users) below.
    - Creates three dedicated service accounts (see below) and grants each its runtime IAM roles.
 2. **`deploy-mcp-grafana.sh`** — deploys the open-source `grafana/mcp-grafana` server to its own Cloud Run service, running as the mcp-grafana service account. Only runs (from `deploy-all.sh`) when `GRAFANA_URL` is set; see [Connecting real Grafana Cloud MCP](#connecting-real-grafana-cloud-mcp) below for why this exists.
 3. **`deploy-backend.sh`** — builds the backend image via Cloud Build, stores any credentials you provide in Secret Manager, and deploys to Cloud Run running as the backend service account, with `CORS_ORIGINS=*` (temporary — see step 5).
@@ -35,7 +36,7 @@ Run them individually if you only need to redeploy one part (e.g. `bash infra/sc
 
 | Service account | Used by | Roles granted |
 |---|---|---|
-| `premiere-backend@<project>.iam.gserviceaccount.com` | `premiere-control-room-backend` | `roles/aiplatform.user` (Gemini via Vertex AI), `roles/secretmanager.secretAccessor` (Grafana/OTLP secrets), `roles/cloudsql.client` (no-op unless Cloud SQL is attached), `roles/logging.logWriter`, `roles/monitoring.metricWriter` |
+| `premiere-backend@<project>.iam.gserviceaccount.com` | `premiere-control-room-backend` | `roles/aiplatform.user` (Gemini via Vertex AI), `roles/secretmanager.secretAccessor` (Grafana/OTLP secrets), `roles/cloudsql.client` (no-op unless Cloud SQL is attached), `roles/datastore.user` (Firestore: incidents/agent events/postmortems/token usage), `roles/logging.logWriter`, `roles/monitoring.metricWriter` |
 | `premiere-frontend@<project>.iam.gserviceaccount.com` | `premiere-control-room-web` | `roles/logging.logWriter`, `roles/monitoring.metricWriter` |
 | `premiere-mcp-grafana@<project>.iam.gserviceaccount.com` | `premiere-control-room-mcp-grafana` | `roles/secretmanager.secretAccessor` (its two secrets), `roles/logging.logWriter`, `roles/monitoring.metricWriter` |
 
@@ -82,11 +83,14 @@ Once it's live, every Sentinel/Detective/Producer/Responder/Wrap MCP tool call i
 
 This is a "for free" side effect worth demoing on its own: `google-adk` has built-in OpenTelemetry instrumentation for every LLM call and every MCP tool call, and it rides the same OTLP pipeline as [Real OpenTelemetry export](#real-opentelemetry-export) below with zero extra setup. Once `OTEL_EXPORTER_OTLP_ENDPOINT`/`OTEL_EXPORTER_OTLP_HEADERS` are set, open Grafana Cloud's [AI Observability](https://grafana.com/docs/grafana-cloud/machine-learning/ai-observability/) app to see real Gemini call latency/token usage and real Grafana MCP tool spans from the live crew — see [`docs/agents.md`](../../docs/agents.md#ai-observability-the-agent-crews-own-telemetry-for-free).
 
-## Persistence: SQLite vs. Cloud SQL
+## Persistence: Firestore (incidents) + SQLite vs. Cloud SQL (users)
 
-The default `DATABASE_URL` is SQLite, which lives on each Cloud Run instance's ephemeral filesystem — fine for a demo, but incident history does **not** survive a redeploy or a cold start after the service scales to zero. `deploy-backend.sh` detects this and pins the service to exactly one instance (`--min-instances=1 --max-instances=1`) so at least concurrent requests see consistent data, and prints a warning.
+Two stores, deliberately (see [`docs/agents.md`](../../docs/agents.md#firestore-persistence) for the full rationale):
 
-For real persistence, provision a small Cloud SQL for PostgreSQL instance first:
+- **Firestore** (Native mode) holds incidents, agent events, remediation actions, postmortems, and token usage — the UI-facing, agent-written timeline data. `00-setup.sh` provisions the project's Firestore database and grants the backend service account `roles/datastore.user`; there's nothing further to configure, and this data survives redeploys and cold starts regardless of the `DATABASE_URL` setting below. A project gets exactly one Firestore database, created once — its location is permanent, so `00-setup.sh` only creates it if one doesn't already exist. Override the location with `FIRESTORE_LOCATION` if `$REGION` isn't a valid Firestore location (Firestore's regions/multi-regions don't map 1:1 to Cloud Run's); override which project it's read from with `FIRESTORE_PROJECT_ID` on `deploy-backend.sh` if it should differ from `GOOGLE_CLOUD_PROJECT`.
+- **SQL** (`DATABASE_URL`) holds users, the audit log, and workspaces — relational constraints (unique email) and audit queries fit SQL better than a document store. The default is SQLite, which lives on each Cloud Run instance's ephemeral filesystem — fine for a demo, but this data does **not** survive a redeploy or a cold start after the service scales to zero. `deploy-backend.sh` detects this and pins the service to exactly one instance (`--min-instances=1 --max-instances=1`) so at least concurrent requests see consistent data, and prints a warning.
+
+For real SQL persistence, provision a small Cloud SQL for PostgreSQL instance first:
 
 ```bash
 bash infra/scripts/provision-cloudsql.sh
@@ -116,7 +120,7 @@ bash infra/scripts/teardown.sh --with-cloudsql         # also deletes the Cloud 
 bash infra/scripts/teardown.sh --with-service-accounts # also deletes the three service accounts
 ```
 
-Flags can be combined. This leaves Artifact Registry images, Secret Manager secrets, and enabled APIs in place (cheap to keep, useful if you redeploy) — delete those manually with `gcloud artifacts repositories delete` / `gcloud secrets delete` if you want a completely clean project.
+Flags can be combined. This leaves Artifact Registry images, Secret Manager secrets, the Firestore database, and enabled APIs in place (cheap/free to keep, useful if you redeploy) — delete those manually with `gcloud artifacts repositories delete` / `gcloud secrets delete` / `gcloud firestore databases delete --database='(default)'` if you want a completely clean project. Note that a project can't get a new Firestore database for a cooldown period after deleting one.
 
 ## Configuration reference
 
@@ -133,5 +137,7 @@ All scripts read the same base variables (all optional):
 | `BACKEND_SA_NAME` | `premiere-backend` | Backend service account short name |
 | `FRONTEND_SA_NAME` | `premiere-frontend` | Frontend service account short name |
 | `MCP_GRAFANA_SA_NAME` | `premiere-mcp-grafana` | mcp-grafana service account short name |
+| `FIRESTORE_LOCATION` | `$REGION` | `00-setup.sh` only; the Firestore database's (permanent) location |
+| `FIRESTORE_PROJECT_ID` | `$GOOGLE_CLOUD_PROJECT` | `deploy-backend.sh` only; override if Firestore lives in a different project |
 
 See each script's header comment for the variables specific to it. The full environment variable reference for the app itself is in [`docs/deployment.md`](../../docs/deployment.md).

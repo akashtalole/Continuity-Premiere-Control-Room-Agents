@@ -38,7 +38,9 @@ flowchart TB
 | `GOOGLE_CLOUD_LOCATION` | backend | Vertex AI region, e.g. `us-central1` |
 | `GOOGLE_API_KEY` | backend | Only needed if using the Gemini Developer API instead of Vertex AI |
 | `GEMINI_MODEL` | backend | e.g. `gemini-flash-latest` |
-| `DATABASE_URL` | backend | Postgres connection string (SQLite for local dev) |
+| `DATABASE_URL` | backend | Users/audit-log/workspaces (SQL): Postgres connection string (SQLite for local dev) |
+| `FIRESTORE_PROJECT_ID` | backend | Incidents/agent events/postmortems/token usage (Firestore): project to read/write, if different from `GOOGLE_CLOUD_PROJECT` -- see [`agents.md`](agents.md#firestore-persistence) |
+| `FIRESTORE_EMULATOR_HOST` | backend | Local dev / tests only: routes Firestore calls at a local emulator instead of real GCP -- see [`setup-guide.md`](setup-guide.md#firestore) |
 | `DEMO_MODE` | backend | Enables `/api/simulate/inject-anomaly` |
 | `SENTINEL_POLL_INTERVAL_SECONDS` | backend | Background Sentinel polling interval, default `15` (only runs once real credentials are configured -- see [`agents.md`](agents.md#sentinel-background-polling-loop)) |
 | `SENTINEL_SLO_THRESHOLDS_JSON` | backend | Optional JSON list of `{metric_name, threshold, region}` to poll; defaults to a built-in set covering all five playbook metrics |
@@ -65,6 +67,6 @@ gcloud config set project <YOUR_PROJECT_ID>
 bash infra/scripts/deploy-all.sh
 ```
 
-With no other environment variables set, this deploys the real Gemini crew via Vertex AI (no API key required) with the deterministic mock crew still standing in for the Grafana side until `GRAFANA_URL` is provided — a fully functional live demo URL in a few minutes either way. See [`infra/scripts/README.md`](https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents/blob/main/infra/scripts/README.md) for connecting real Grafana Cloud MCP credentials, using a Gemini API key instead of Vertex AI, provisioning Cloud SQL for real persistence (the default SQLite is ephemeral on Cloud Run), enabling real OTLP export, and tearing everything down afterward.
+With no other environment variables set, this deploys the real Gemini crew via Vertex AI (no API key required) with the deterministic mock crew still standing in for the Grafana side until `GRAFANA_URL` is provided — a fully functional live demo URL in a few minutes either way. `00-setup.sh` also provisions the project's Firestore database along the way, so incident history persists from the first deploy regardless of the Grafana/Gemini config. See [`infra/scripts/README.md`](https://github.com/akashtalole/Continuity-Premiere-Control-Room-Agents/blob/main/infra/scripts/README.md) for connecting real Grafana Cloud MCP credentials, using a Gemini API key instead of Vertex AI, provisioning Cloud SQL for real users/audit-log persistence (the default SQLite there is ephemeral on Cloud Run), enabling real OTLP export, and tearing everything down afterward.
 
 Each app also ships its own `Dockerfile` (`backend/Dockerfile`, `frontend/Dockerfile`) if you'd rather drive `gcloud builds submit` / `gcloud run deploy` by hand; `infra/cloudrun-backend.yaml` and `infra/cloudrun-frontend.yaml` document the equivalent declarative Cloud Run service manifests (`gcloud run services replace <file> --region <region>`), though the scripts under `infra/scripts/` are the tested, maintained path.
