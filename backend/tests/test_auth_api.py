@@ -2,6 +2,8 @@
 bootstrapped admin (ADMIN_EMAIL/ADMIN_PASSWORD) the `client` fixture logs
 in as, and `anonymous_client` for the no-token path."""
 
+from app.auth import ensure_bootstrap_data
+from app.config import get_settings
 from tests.conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 
@@ -17,6 +19,40 @@ async def test_login_succeeds_with_correct_credentials(anonymous_client):
 async def test_login_fails_with_wrong_password(anonymous_client):
     resp = await anonymous_client.post("/api/auth/login", json={"email": ADMIN_EMAIL, "password": "wrong"})
     assert resp.status_code == 401
+
+
+async def test_ensure_bootstrap_data_resets_admin_password_on_every_call(anonymous_client):
+    """ADMIN_PASSWORD is meant to be settable on every redeploy, not just the
+    service's first-ever boot -- see the docstring on ensure_bootstrap_data.
+    Uses a throwaway email so it doesn't disturb ADMIN_EMAIL's password for
+    every other test in this session."""
+    settings = get_settings()
+    original_email, original_password = settings.admin_email, settings.admin_password
+    throwaway_email = "bootstrap-reset-test@test.local"
+    try:
+        settings.admin_email = throwaway_email
+        settings.admin_password = "first-password"
+        await ensure_bootstrap_data()
+
+        first_login = await anonymous_client.post(
+            "/api/auth/login", json={"email": throwaway_email, "password": "first-password"}
+        )
+        assert first_login.status_code == 200
+
+        settings.admin_password = "second-password"
+        await ensure_bootstrap_data()
+
+        stale_login = await anonymous_client.post(
+            "/api/auth/login", json={"email": throwaway_email, "password": "first-password"}
+        )
+        assert stale_login.status_code == 401
+
+        fresh_login = await anonymous_client.post(
+            "/api/auth/login", json={"email": throwaway_email, "password": "second-password"}
+        )
+        assert fresh_login.status_code == 200
+    finally:
+        settings.admin_email, settings.admin_password = original_email, original_password
 
 
 async def test_inject_anomaly_requires_auth(anonymous_client):
