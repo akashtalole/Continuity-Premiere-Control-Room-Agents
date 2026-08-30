@@ -9,10 +9,10 @@ Role hierarchy is deliberately simple -- three tiers, checked by rank:
   admin    -- everything operator can, plus user management and seeing
               every workspace regardless of their own workspace_id
 
-Bootstrapping: ensure_bootstrap_data() creates the default workspace and,
-the first time the users table is empty, one admin account from
-settings.admin_email/admin_password -- called from main.py's lifespan
-after init_db().
+Bootstrapping: ensure_bootstrap_data() creates the default workspace and
+reconciles one admin account from settings.admin_email/admin_password on
+every startup -- called from main.py's lifespan after init_db(). See that
+function's docstring for exactly what "reconciles" means.
 """
 
 import hashlib
@@ -25,7 +25,7 @@ from typing import Literal
 
 import jwt
 from fastapi import Depends, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import session_scope
@@ -121,24 +121,48 @@ def require_role(minimum: Role):
 
 
 async def ensure_bootstrap_data() -> None:
-    """Create the default workspace and, if no users exist yet, one admin
-    account -- called once from main.py's lifespan after init_db()."""
+    """Create the default workspace and reconcile the bootstrap admin account
+    -- called on every startup from main.py's lifespan after init_db().
+
+    Whenever ADMIN_PASSWORD is set, it's the source of truth for the
+    ADMIN_EMAIL account on *every* boot, not just the first -- deploy with
+    different values and this account's password/role/active flag are reset
+    to match, every time. That makes `export ADMIN_EMAIL=... ADMIN_PASSWORD=...`
+    simple and idempotent: set it, (re)deploy, sign in, with no dependency on
+    whether this is the service's first boot or its fiftieth. The one-shot
+    random-password fallback below only fires when ADMIN_PASSWORD is left
+    unset AND no account with ADMIN_EMAIL exists yet.
+    """
     settings = get_settings()
     async with session_scope() as db:
         if await db.get(Workspace, DEFAULT_WORKSPACE_ID) is None:
             db.add(Workspace(id=DEFAULT_WORKSPACE_ID, name="Default"))
 
-        user_count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
-        if user_count == 0:
-            password = settings.admin_password
-            if not password:
-                password = secrets.token_urlsafe(12)
-                logger.warning(
-                    "No ADMIN_PASSWORD set -- generated one for %s: %s "
-                    "(shown once in this log; sign in and rotate it via the admin API)",
-                    settings.admin_email,
-                    password,
+        admin = (await db.execute(select(User).where(User.email == settings.admin_email))).scalar_one_or_none()
+
+        if settings.admin_password:
+            if admin is None:
+                db.add(
+                    User(
+                        email=settings.admin_email,
+                        password_hash=hash_password(settings.admin_password),
+                        role="admin",
+                        workspace_id=DEFAULT_WORKSPACE_ID,
+                    )
                 )
+            else:
+                admin.password_hash = hash_password(settings.admin_password)
+                admin.role = "admin"
+                admin.active = True
+        elif admin is None:
+            password = secrets.token_urlsafe(12)
+            logger.warning(
+                "No ADMIN_PASSWORD set -- generated one for %s: %s "
+                "(shown once in this log; sign in and rotate it via the admin API, "
+                "or set ADMIN_PASSWORD and redeploy)",
+                settings.admin_email,
+                password,
+            )
             db.add(
                 User(
                     email=settings.admin_email,

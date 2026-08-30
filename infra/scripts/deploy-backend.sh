@@ -30,12 +30,11 @@
 #   OTEL_EXPORTER_OTLP_ENDPOINT       Grafana Cloud OTLP gateway, or leave unset for console-only telemetry
 #   OTEL_EXPORTER_OTLP_HEADERS        stored in Secret Manager; e.g. "Authorization=Basic <base64>"
 #   CORS_ORIGINS                      default: "*" (deploy-all.sh tightens this after the frontend deploys)
-#   ADMIN_EMAIL / ADMIN_PASSWORD      bootstrap admin account, created once on first boot against an empty
-#                                      users table (a later change here has no effect once that account
-#                                      already exists -- see the warning this script prints). ADMIN_PASSWORD
-#                                      is stored in Secret Manager. Leaving both unset generates a random
-#                                      password for admin@premiere.local, logged once on first boot
-#                                      (`gcloud run services logs read`).
+#   ADMIN_EMAIL / ADMIN_PASSWORD      admin account credentials -- reconciled on every boot, so set/change
+#                                      these and redeploy any time to set/reset this account's password.
+#                                      ADMIN_PASSWORD is stored in Secret Manager. Leaving both unset
+#                                      generates a random password for admin@premiere.local the first time
+#                                      that account doesn't exist yet, logged once (`gcloud run services logs read`).
 #
 # Gemini auth defaults to Vertex AI: the backend authenticates as its own
 # service account (no API key needed at all) via Application Default
@@ -189,17 +188,7 @@ BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
 log "Backend deployed: $BACKEND_URL"
 echo "$BACKEND_URL" > "$ROOT/infra/scripts/.backend-url"
 
-if [[ -n "${ADMIN_EMAIL:-}" || -n "${ADMIN_PASSWORD:-}" ]]; then
-  warn "ADMIN_EMAIL/ADMIN_PASSWORD only take effect against an EMPTY users"
-  warn "table -- the bootstrap admin is created once, on the first boot that"
-  warn "finds no users at all, and never updated after. If this service has"
-  warn "booted before (with different/no admin vars, e.g. a prior random"
-  warn "password), this deploy did NOT change that account -- log in with the"
-  warn "original credentials instead (check this revision's logs for the"
-  warn "'No ADMIN_PASSWORD set' line: gcloud run services logs read"
-  warn "$BACKEND_SERVICE --region $REGION), then use POST /api/auth/users to"
-  warn "create the account you actually want. To force a fresh bootstrap"
-  warn "instead: on SQLite, that means a container that has never booted --"
-  warn "not guaranteed by a redeploy alone if min-instances kept an old one"
-  warn "warm; on Cloud SQL/Postgres, delete the existing row from the users table."
+if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+  log "ADMIN_PASSWORD was set -- the ${ADMIN_EMAIL:-admin@premiere.local} account's"
+  log "password is reconciled to it on every boot, so it should already be live."
 fi
