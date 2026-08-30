@@ -241,7 +241,7 @@ async def _run_crew(self, incident_id, anomaly):
 
 `app/adk_agents/memory_tools.py` gives the Detective a `find_similar_incidents(metric_name, limit)` `FunctionTool` -- a real Firestore read (`app/services/incident_store.py`, see below), not a vector store or RAG pipeline, since "has this exact metric broken before" is a query, not a semantic search. It looks up past incidents with the same breaching `metric_name` that reached a terminal status, joining in each one's remediation action and postmortem excerpt. `DETECTIVE_INSTRUCTION` tells the agent to call it first and weigh its confidence up or down based on what comes back. `app/adk_agents/mock_crew.py`'s `MockDetectiveInvoker` calls the same lookup function directly (not a canned response), so the "we've seen this before" behavior demos identically without live Gemini/Grafana credentials -- see `tests/test_memory.py`.
 
-## Cost & token usage
+## Cost and token usage
 
 `AgentInvoker.run()` (runner.py) reads `event.usage_metadata` (`prompt_token_count` / `candidates_token_count`) off every ADK event and accumulates it into `self.last_usage`; the orchestrator persists that as a Firestore `token_usage` document after each agent turn (a no-op for the mock crew's invokers, which never set `last_usage` since they never call a model). `GET /api/incidents/{id}` returns each incident's per-agent breakdown, and `GET /api/analytics/summary` returns fleet-wide totals (via a Firestore collection-group query across every incident's `token_usage` subcollection) plus a rough estimated USD cost (list-price constants in `routers/analytics.py`, not a real billing integration) -- surfaced in the frontend's incident timeline and history page.
 
