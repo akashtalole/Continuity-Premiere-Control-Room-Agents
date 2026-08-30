@@ -30,6 +30,12 @@
 #   OTEL_EXPORTER_OTLP_ENDPOINT       Grafana Cloud OTLP gateway, or leave unset for console-only telemetry
 #   OTEL_EXPORTER_OTLP_HEADERS        stored in Secret Manager; e.g. "Authorization=Basic <base64>"
 #   CORS_ORIGINS                      default: "*" (deploy-all.sh tightens this after the frontend deploys)
+#   ADMIN_EMAIL / ADMIN_PASSWORD      bootstrap admin account, created once on first boot against an empty
+#                                      users table (a later change here has no effect once that account
+#                                      already exists -- see the warning this script prints). ADMIN_PASSWORD
+#                                      is stored in Secret Manager. Leaving both unset generates a random
+#                                      password for admin@premiere.local, logged once on first boot
+#                                      (`gcloud run services logs read`).
 #
 # Gemini auth defaults to Vertex AI: the backend authenticates as its own
 # service account (no API key needed at all) via Application Default
@@ -87,6 +93,9 @@ put_secret_value premiere-control-room-grafana-token "${GRAFANA_SERVICE_ACCOUNT_
 put_secret_value premiere-control-room-otel-headers "${OTEL_EXPORTER_OTLP_HEADERS:-}"
 [[ -n "${OTEL_EXPORTER_OTLP_HEADERS:-}" ]] && SET_SECRETS+=("OTEL_EXPORTER_OTLP_HEADERS=premiere-control-room-otel-headers:latest")
 
+put_secret_value premiere-control-room-admin-password "${ADMIN_PASSWORD:-}"
+[[ -n "${ADMIN_PASSWORD:-}" ]] && SET_SECRETS+=("ADMIN_PASSWORD=premiere-control-room-admin-password:latest")
+
 # Only present once deploy-mcp-grafana.sh has been run -- the caller-auth
 # token this backend presents to the self-hosted MCP server (see mcp.py).
 # Not relevant, and not set, when using the hosted mcp.grafana.com endpoint.
@@ -131,6 +140,7 @@ ENV_VARS=(
 )
 [[ -n "$DATABASE_URL_ENV" ]] && ENV_VARS+=("DATABASE_URL=${DATABASE_URL_ENV}")
 [[ -n "${FIRESTORE_PROJECT_ID:-}" ]] && ENV_VARS+=("FIRESTORE_PROJECT_ID=${FIRESTORE_PROJECT_ID}")
+[[ -n "${ADMIN_EMAIL:-}" ]] && ENV_VARS+=("ADMIN_EMAIL=${ADMIN_EMAIL}")
 
 ENV_VARS_JOINED="$(IFS=,; echo "${ENV_VARS[*]}")"
 
@@ -178,3 +188,18 @@ BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
 
 log "Backend deployed: $BACKEND_URL"
 echo "$BACKEND_URL" > "$ROOT/infra/scripts/.backend-url"
+
+if [[ -n "${ADMIN_EMAIL:-}" || -n "${ADMIN_PASSWORD:-}" ]]; then
+  warn "ADMIN_EMAIL/ADMIN_PASSWORD only take effect against an EMPTY users"
+  warn "table -- the bootstrap admin is created once, on the first boot that"
+  warn "finds no users at all, and never updated after. If this service has"
+  warn "booted before (with different/no admin vars, e.g. a prior random"
+  warn "password), this deploy did NOT change that account -- log in with the"
+  warn "original credentials instead (check this revision's logs for the"
+  warn "'No ADMIN_PASSWORD set' line: gcloud run services logs read"
+  warn "$BACKEND_SERVICE --region $REGION), then use POST /api/auth/users to"
+  warn "create the account you actually want. To force a fresh bootstrap"
+  warn "instead: on SQLite, that means a container that has never booted --"
+  warn "not guaranteed by a redeploy alone if min-instances kept an old one"
+  warn "warm; on Cloud SQL/Postgres, delete the existing row from the users table."
+fi
