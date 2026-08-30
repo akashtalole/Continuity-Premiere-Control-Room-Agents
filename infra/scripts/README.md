@@ -112,6 +112,20 @@ export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n '<instance_id>:
 bash infra/scripts/deploy-backend.sh
 ```
 
+This makes metrics/logs/traces queryable in your stack, but it does **not** create the dashboard the control room UI embeds a panel from — see the next section.
+
+## Provisioning the SLO dashboard
+
+The control room UI's embedded panel (`GrafanaPanelEmbed` in `frontend/app/page.tsx`) and the backend's panel-image render endpoint both hardcode `dashboard_uid=premiere-slo-overview` — a dashboard this repo has always assumed already exists in your Grafana Cloud stack, but never actually creates anywhere. If you're seeing "Dashboard not found" in the control room UI, this is why. Create it once per stack:
+
+```bash
+export GRAFANA_URL="https://<stack>.grafana.net"
+export GRAFANA_SERVICE_ACCOUNT_TOKEN="<token, Editor role or higher>"
+bash infra/scripts/provision-grafana-dashboard.sh
+```
+
+This looks up your stack's default Prometheus (Mimir) datasource and creates a 5-panel dashboard (rebuffer ratio, origin error rate, encoder queue depth, playback failure rate, cache hit ratio — all by region), with panel 1 (rebuffer ratio) matching what the UI embeds. Safe to re-run (`overwrite: true`). Panels show real data only once the [OTel export above](#real-opentelemetry-export) is actually configured and the synthetic pipeline has had a few export cycles to land data.
+
 ## Tearing down
 
 ```bash
