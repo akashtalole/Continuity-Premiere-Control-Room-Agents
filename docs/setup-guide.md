@@ -108,7 +108,7 @@ export ADMIN_PASSWORD="<a real password>"
 bash infra/scripts/deploy-backend.sh
 ```
 
-Skip this and a random password is generated for you on first boot — retrieve it from the Cloud Run service's logs (`gcloud run services logs read premiere-control-room-backend --region <region>`, look for the `ADMIN_PASSWORD` line) and sign in once to rotate it.
+This only takes effect against an **empty** users table -- the bootstrap admin is created once, on the first boot that finds no users at all, and never updated after. Export these *before* the service has ever booted (i.e. before the first `deploy-backend.sh`/`deploy-all.sh`), not as a way to change an existing admin's credentials later — that's not a thing this does. Skip this and a random password is generated for you on first boot instead — retrieve it from the Cloud Run service's logs (`gcloud run services logs read premiere-control-room-backend --region <region>`, look for the `ADMIN_PASSWORD` line) and sign in with `admin@premiere.local` and that password. There's no self-service password rotation yet; once signed in, use `POST /api/auth/users` (admin-only) to create the account you actually want.
 
 ### Everything else
 
